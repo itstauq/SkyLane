@@ -10,28 +10,27 @@ struct ViewSwitcher: View {
     @State private var visualDragOffset: CGFloat = 0
     @State private var tabFrames: [UUID: CGRect] = [:]
 
-    private let tabSpacing: CGFloat = 6
+    private let tabSpacing: CGFloat = 4
     private let tabHeight: CGFloat = 28
     private let tabMinWidth: CGFloat = 28
-    private let tabMaxWidth: CGFloat = 120
-    private let activeTabMaxWidth: CGFloat = 140
+    private let tabMaxWidth: CGFloat = 140
     private let plusButtonWidth: CGFloat = 28
     private let horizontalInset: CGFloat = 4
-    private let controlGap: CGFloat = 6
+    private let controlGap: CGFloat = 4
     private let reorderThresholdFactor: CGFloat = 0.82
 
     var body: some View {
         GeometryReader { proxy in
-            let tabsAvailableWidth = max(proxy.size.width - plusButtonWidth - controlGap, 0)
-            let layout = tabLayout(for: tabsAvailableWidth)
+            let tabsMaxWidth = max(proxy.size.width - plusButtonWidth - controlGap, 0)
+            let layout = tabLayout(for: tabsMaxWidth)
 
-            HStack(spacing: controlGap) {
-                Group {
-                    if layout.needsScroll {
+            Group {
+                if layout.needsScroll {
+                    HStack(spacing: controlGap) {
                         ScrollViewReader { scrollProxy in
                             ScrollView(.horizontal, showsIndicators: false) {
                                 tabStripRow(layout: layout)
-                                    .frame(width: layout.contentWidth, alignment: .leading)
+                                    .frame(width: max(layout.contentWidth, tabsMaxWidth), alignment: .leading)
                             }
                             .onAppear {
                                 scrollToSelected(using: scrollProxy, animated: false)
@@ -40,17 +39,28 @@ struct ViewSwitcher: View {
                                 scrollToSelected(using: scrollProxy, animated: true)
                             }
                         }
-                    } else {
-                        tabStripRow(layout: layout)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(width: tabsMaxWidth, alignment: .leading)
+                        .clipped()
 
-                addButton
+                        addButton
+                            .frame(width: plusButtonWidth, height: tabHeight)
+                    }
+                    .background(.white.opacity(0.08), in: Capsule())
+                    .foregroundStyle(.white)
+                    .frame(width: proxy.size.width, alignment: .leading)
+                } else {
+                    HStack(spacing: controlGap) {
+                        tabStripRow(layout: layout)
+                            .frame(width: min(layout.contentWidth, tabsMaxWidth), alignment: .leading)
+                            .clipped()
+                        addButton
+                            .frame(width: plusButtonWidth, height: tabHeight)
+                    }
+                    .background(.white.opacity(0.08), in: Capsule())
+                    .foregroundStyle(.white)
+                    .frame(width: min(layout.contentWidth + controlGap + plusButtonWidth, proxy.size.width), alignment: .leading)
+                }
             }
-            .background(.white.opacity(0.08), in: Capsule())
-            .foregroundStyle(.white)
         }
         .frame(height: 36)
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in
@@ -280,7 +290,6 @@ struct ViewSwitcher: View {
                 .background(.white.opacity(0.06), in: Circle())
         }
         .buttonStyle(.plain)
-        .padding(.trailing, horizontalInset)
     }
 
     @ViewBuilder
@@ -349,8 +358,9 @@ struct ViewSwitcher: View {
         let reservedWidth = horizontalInset * 2
         let totalSpacing = CGFloat(max(views.count - 1, 0)) * tabSpacing
         let availableTabWidth = max(availableWidth - reservedWidth - totalSpacing, 0)
+        let visibleTabCap = availableTabWidth / 3
 
-        let preferredWidths = views.map { preferredWidth(for: $0) }
+        let preferredWidths = views.map { min(preferredWidth(for: $0), visibleTabCap) }
         let minimumWidths = Array(repeating: tabMinWidth, count: views.count)
         let preferredTotal = preferredWidths.reduce(0, +)
         let selectedIndex = views.firstIndex { $0.id == viewManager.selectedViewID }
@@ -390,7 +400,7 @@ struct ViewSwitcher: View {
 
         return TabLayout(
             widthsByID: widthMap,
-            contentWidth: max(contentWidth, availableWidth),
+            contentWidth: contentWidth,
             needsScroll: needsScroll
         )
     }
@@ -399,13 +409,8 @@ struct ViewSwitcher: View {
         let measuredTitleWidth = view.name.size(withAttributes: [
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold)
         ]).width
-        let preferredWidth = measuredTitleWidth + 36
-
-        if view.id == viewManager.selectedViewID {
-            return min(max(preferredWidth + 10, 92), activeTabMaxWidth)
-        }
-
-        return min(max(preferredWidth, 72), tabMaxWidth)
+        let preferredWidth = measuredTitleWidth + 44
+        return min(preferredWidth, tabMaxWidth)
     }
 
     private func compressedWidths(preferred: [CGFloat], minimum: [CGFloat], targetTotal: CGFloat) -> [CGFloat] {

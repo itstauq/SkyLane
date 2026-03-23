@@ -13,12 +13,11 @@ struct NotchContentView: View {
     }
 
     private var headerLaneWidth: CGFloat {
-        max(0, ((vm.expandedWidth - vm.notchWidth) / 2) - 22)
+        max(0, (vm.expandedWidth - vm.notchWidth) / 2)
     }
 
-    private var headerTopInset: CGFloat {
-        max(10, (vm.notchHeight - 26) / 2)
-    }
+    private let headerRowHeight: CGFloat = 44
+    private let showsHeaderLaneDebug = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,29 +50,51 @@ struct NotchContentView: View {
 
     private var expandedContent: some View {
         ZStack(alignment: .topLeading) {
-            ViewSwitcher(viewManager: vm.viewManager, vm: vm)
-                .frame(width: headerLaneWidth, alignment: .leading)
-                .clipped()
-                .padding(.top, headerTopInset)
-                .padding(.leading, 12)
+            HStack(spacing: 0) {
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(showsHeaderLaneDebug ? Color.red.opacity(0.18) : .clear)
 
-            HStack(spacing: 6) {
-                HeaderAccessoryButton(
-                    activeSymbol: "pin.fill",
-                    inactiveSymbol: "pin",
-                    tint: Color(red: 0.98, green: 0.39, blue: 0.43),
-                    isActive: vm.isViewPinned,
-                    inactiveRotation: .degrees(45)
-                ) {
-                    vm.togglePinnedView()
+                    ZStack(alignment: .leading) {
+                        ViewSwitcher(viewManager: vm.viewManager, vm: vm)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    }
+                    .frame(width: max(0, headerLaneWidth - 24), height: max(0, headerRowHeight - 8), alignment: .leading)
+                    .clipped()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
                 }
+                .frame(width: headerLaneWidth, height: headerRowHeight)
+                .clipped()
 
-                HeaderAccessoryButton(activeSymbol: "gearshape.fill") {}
+                Rectangle()
+                    .fill(showsHeaderLaneDebug ? Color.green.opacity(0.2) : .clear)
+                    .frame(width: vm.notchWidth, height: headerRowHeight)
+
+                ZStack(alignment: .trailing) {
+                    Rectangle()
+                        .fill(showsHeaderLaneDebug ? Color.blue.opacity(0.18) : .clear)
+
+                    HStack(spacing: 6) {
+                        HeaderAccessoryButton(
+                            activeSymbol: "pin.fill",
+                            inactiveSymbol: "pin",
+                            tint: Color(red: 0.98, green: 0.39, blue: 0.43),
+                            isActive: vm.isViewPinned,
+                            inactiveRotation: .degrees(45)
+                        ) {
+                            vm.togglePinnedView()
+                        }
+
+                        HeaderAccessoryButton(activeSymbol: "gearshape.fill") {}
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                }
+                .frame(width: headerLaneWidth, height: headerRowHeight)
+                .clipped()
             }
-            .frame(width: headerLaneWidth, alignment: .trailing)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.top, headerTopInset)
-            .padding(.trailing, 14)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             // Widget area below the notch
             VStack {
@@ -84,7 +105,7 @@ struct NotchContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, vm.notchHeight + 8)
+            .padding(.top, headerRowHeight + 8)
 
             // Rename overlay — covers entire expanded area
             if vm.isRenamingView {
