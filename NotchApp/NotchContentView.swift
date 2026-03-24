@@ -515,8 +515,8 @@ private struct WidgetCard: View {
                     .frame(height: 40)
                     .overlay {
                         HStack(spacing: 4) {
-                            Text("Draft pricing copy before lunch")
-                                .font(.system(size: 12, weight: .semibold))
+                            Text("Press ↵ to capture another item")
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.48))
                                 .lineLimit(1)
 
@@ -534,10 +534,15 @@ private struct WidgetCard: View {
                         .padding(.horizontal, 8)
                     }
 
-                Text("Press ↵ to capture your first item")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.34))
-                    .frame(maxWidth: .infinity, alignment: .center)
+                captureItemRow(
+                    title: "Potential whitespace bug in tab rename field",
+                    isChecked: false
+                )
+
+                captureItemRow(
+                    title: "Pick up oat milk on the way home",
+                    isChecked: true
+                )
             }
         case .pomodoro:
             VStack(spacing: 20) {
@@ -610,12 +615,39 @@ private struct WidgetCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.black.opacity(0.18))
                 .overlay {
-                    Image("CameraPreview")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    ZStack {
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.25, green: 0.28, blue: 0.34),
+                                Color(red: 0.18, green: 0.2, blue: 0.26),
+                                Color(red: 0.12, green: 0.14, blue: 0.19)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.14),
+                                Color.white.opacity(0.03),
+                                .clear
+                            ],
+                            center: .topTrailing,
+                            startRadius: 12,
+                            endRadius: 180
+                        )
+
+                        LinearGradient(
+                            colors: [
+                                tint.opacity(0.2),
+                                .clear,
+                                Color.black.opacity(0.22)
+                            ],
+                            startPoint: .bottomLeading,
+                            endPoint: .topTrailing
+                        )
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .overlay(alignment: .topTrailing) {
                     cameraOverlayBadge("gearshape.fill")
@@ -885,6 +917,39 @@ private struct WidgetCard: View {
                 .padding(12)
             }
             .frame(height: 104)
+    }
+
+    private func captureItemRow(title: String, isChecked: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(.white.opacity(0.05))
+            .frame(height: 34)
+            .overlay {
+                HStack(spacing: 8) {
+                    Circle()
+                        .strokeBorder(.white.opacity(isChecked ? 0.12 : 0.28), lineWidth: 1.2)
+                        .frame(width: 14, height: 14)
+                        .overlay {
+                            if isChecked {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.72))
+                            }
+                        }
+
+                    Text(title)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(isChecked ? 0.42 : 0.72))
+                        .strikethrough(isChecked, color: .white.opacity(0.28))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "trash")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(isChecked ? 0.26 : 0.42))
+                }
+                .padding(.horizontal, 10)
+            }
     }
 
     private func pomodoroModeChip(_ title: String, selected: Bool, tint: Color) -> some View {
