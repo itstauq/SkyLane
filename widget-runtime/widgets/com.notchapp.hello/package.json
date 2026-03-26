@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "develop": "notch develop",
-    "build": "notch build",
-    "lint": "notch lint"
+    "dev": "notchapp develop",
+    "build": "notchapp build",
+    "lint": "notchapp lint"
+  },
+  "devDependencies": {
+    "notchapp": "^0.1.0"
   },
   "dependencies": {
-    "@notch/api": "file:../../packages/widget-api"
+    "@notchapp/api": "^0.1.0"
   },
   "notch": {
     "id": "com.notchapp.hello",

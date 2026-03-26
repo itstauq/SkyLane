@@ -63,7 +63,7 @@ PY
 }
 
 bootstrap_deps() {
-  if [ ! -d "$ROOT_DIR/node_modules/esbuild" ]; then
+  if [ ! -d "$ROOT_DIR/node_modules/notch" ]; then
     echo "Installing widget tooling dependencies..."
     "$NPM_BIN" install --prefix "$ROOT_DIR"
   fi

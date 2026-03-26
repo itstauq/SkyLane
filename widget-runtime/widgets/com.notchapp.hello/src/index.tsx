@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from "@notch/api";
+import { Button, Stack, Text } from "@notchapp/api";
 
 export const initialState = {
   count: 0,

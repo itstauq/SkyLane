@@ -1,9 +1,13 @@
 {
-  "name": "@notch/api",
+  "name": "@notchapp/api",
   "version": "0.1.0",
   "main": "index.js",
-  "bin": {
-    "notch": "./bin/notch.js"
+  "files": [
+    "index.js",
+    "jsx-runtime.js"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "exports": {
     ".": "./index.js",
