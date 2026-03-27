@@ -843,6 +843,7 @@ final class NotchViewModel {
     }
 
     func saveEditMode() {
+        viewManager.persistCurrentState()
         finishEditMode()
     }
 

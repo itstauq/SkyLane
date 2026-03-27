@@ -256,7 +256,51 @@ enum RepoPaths {
     }()
 
     static let installedWidgetsRoot = applicationSupportRoot.appendingPathComponent("Widgets", isDirectory: true)
+    static let savedViewsSnapshotURL = applicationSupportRoot.appendingPathComponent("saved-views.json")
 
+}
+
+private struct PersistedViewStateSnapshot: Codable {
+    var views: [SavedView]
+    var selectedViewID: UUID
+    var layoutsByViewID: [UUID: ViewLayout]
+
+    private enum CodingKeys: String, CodingKey {
+        case views
+        case selectedViewID
+        case layoutsByViewID
+    }
+
+    init(views: [SavedView], selectedViewID: UUID, layoutsByViewID: [UUID: ViewLayout]) {
+        self.views = views
+        self.selectedViewID = selectedViewID
+        self.layoutsByViewID = layoutsByViewID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        views = try container.decode([SavedView].self, forKey: .views)
+        selectedViewID = try container.decode(UUID.self, forKey: .selectedViewID)
+        let rawLayouts = try container.decode([String: ViewLayout].self, forKey: .layoutsByViewID)
+        layoutsByViewID = Dictionary(
+            uniqueKeysWithValues: rawLayouts.compactMap { key, value in
+                guard let id = UUID(uuidString: key) else { return nil }
+                return (id, value)
+            }
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(views, forKey: .views)
+        try container.encode(selectedViewID, forKey: .selectedViewID)
+        let rawLayouts = Dictionary(
+            uniqueKeysWithValues: layoutsByViewID.map { key, value in
+                (key.uuidString, value)
+            }
+        )
+        try container.encode(rawLayouts, forKey: .layoutsByViewID)
+    }
 }
 
 enum WidgetInstall {
@@ -416,8 +460,14 @@ final class ViewManager {
 
     private var layoutsByViewID: [UUID: ViewLayout]
     private let log = FileLog()
+    private let jsonEncoder: JSONEncoder
+    private let jsonDecoder: JSONDecoder
 
     init() {
+        jsonEncoder = JSONEncoder()
+        jsonEncoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        jsonDecoder = JSONDecoder()
+
         views = SavedView.defaultViews
         selectedViewID = SavedView.defaultViews[0].id
         widgetDefinitions = WidgetCatalog.discover()
@@ -425,7 +475,7 @@ final class ViewManager {
         layoutsByViewID = Dictionary(
             uniqueKeysWithValues: SavedView.defaultViews.map { ($0.id, ViewLayout()) }
         )
-        resetDefaultLayouts()
+        restorePersistedState()
     }
 
     var selectedView: SavedView? {
@@ -469,6 +519,7 @@ final class ViewManager {
 
     func select(_ view: SavedView) {
         selectedViewID = view.id
+        persistState()
     }
 
     func addView(name: String, icon: String = "square.grid.2x2.fill") {
@@ -476,6 +527,7 @@ final class ViewManager {
         views.append(view)
         layoutsByViewID[view.id] = ViewLayout()
         selectedViewID = view.id
+        persistState()
     }
 
     func removeView(_ view: SavedView) {
@@ -485,17 +537,20 @@ final class ViewManager {
         if selectedViewID == view.id {
             selectedViewID = views[0].id
         }
+        persistState()
     }
 
     func renameView(_ view: SavedView, to name: String) {
         if let i = views.firstIndex(where: { $0.id == view.id }) {
             views[i].name = name
+            persistState()
         }
     }
 
     func setIcon(_ view: SavedView, to icon: String) {
         if let i = views.firstIndex(where: { $0.id == view.id }) {
             views[i].icon = icon
+            persistState()
         }
     }
 
@@ -515,6 +570,10 @@ final class ViewManager {
 
     func moveViewRight(_ view: SavedView) {
         move(view, by: 1)
+    }
+
+    func persistCurrentState() {
+        persistState()
     }
 
     func occupancyForSelectedView() -> [UUID?] {
@@ -690,6 +749,91 @@ final class ViewManager {
         let destinationIndex = currentIndex + offset
         guard views.indices.contains(destinationIndex) else { return }
         views.swapAt(currentIndex, destinationIndex)
+        persistState()
+    }
+
+    private func restorePersistedState() {
+        let defaults = defaultState()
+        let restoredState = loadPersistedState() ?? defaults
+        applyRestoredState(restoredState)
+    }
+
+    private func defaultState() -> PersistedViewStateSnapshot {
+        var defaultLayouts = Dictionary(
+            uniqueKeysWithValues: SavedView.defaultViews.map { ($0.id, ViewLayout()) }
+        )
+        defaultLayouts[SavedView.homeID] = defaultLayout(for: SavedView.homeID)
+        defaultLayouts[SavedView.focusID] = defaultLayout(for: SavedView.focusID)
+        defaultLayouts[SavedView.planID] = defaultLayout(for: SavedView.planID)
+
+        return PersistedViewStateSnapshot(
+            views: SavedView.defaultViews,
+            selectedViewID: SavedView.defaultViews[0].id,
+            layoutsByViewID: defaultLayouts
+        )
+    }
+
+    private func loadPersistedState() -> PersistedViewStateSnapshot? {
+        let snapshotURL = RepoPaths.savedViewsSnapshotURL
+        guard FileManager.default.fileExists(atPath: snapshotURL.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: snapshotURL)
+            return try jsonDecoder.decode(PersistedViewStateSnapshot.self, from: data)
+        } catch {
+            log.write("Saved views: failed to load persisted state: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func applyRestoredState(_ snapshot: PersistedViewStateSnapshot) {
+        var restoredViews = snapshot.views
+        var restoredLayouts = snapshot.layoutsByViewID
+
+        for defaultView in SavedView.defaultViews {
+            if !restoredViews.contains(where: { $0.id == defaultView.id }) {
+                restoredViews.append(defaultView)
+                restoredLayouts[defaultView.id] = defaultLayout(for: defaultView.id)
+            }
+        }
+
+        if restoredViews.isEmpty {
+            restoredViews = SavedView.defaultViews
+        }
+
+        views = restoredViews
+        layoutsByViewID = Dictionary(
+            uniqueKeysWithValues: restoredViews.map { view in
+                let layout = restoredLayouts[view.id] ?? defaultLayout(for: view.id)
+                return (view.id, layout)
+            }
+        )
+
+        sanitizeAllLayouts()
+
+        if views.contains(where: { $0.id == snapshot.selectedViewID }) {
+            selectedViewID = snapshot.selectedViewID
+        } else {
+            selectedViewID = views.first?.id ?? SavedView.defaultViews[0].id
+        }
+    }
+
+    private func persistState() {
+        let snapshot = PersistedViewStateSnapshot(
+            views: views,
+            selectedViewID: selectedViewID,
+            layoutsByViewID: layoutsByViewID
+        )
+
+        do {
+            try FileManager.default.createDirectory(at: RepoPaths.applicationSupportRoot, withIntermediateDirectories: true)
+            let data = try jsonEncoder.encode(snapshot)
+            try data.write(to: RepoPaths.savedViewsSnapshotURL, options: .atomic)
+        } catch {
+            log.write("Saved views: failed to persist state: \(error.localizedDescription)")
+        }
     }
 
     private func totalUsedColumns(in layout: ViewLayout) -> Int {
