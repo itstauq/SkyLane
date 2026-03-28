@@ -12,6 +12,7 @@
 		A10000030000000000000003 /* NotchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000030000000000000003; };
 		A10000040000000000000004 /* NotchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000040000000000000004; };
 		A10000050000000000000005 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000050000000000000005; };
+		A10000110000000000000011 /* RuntimeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000110000000000000011; };
 			A10000080000000000000008 /* SavedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000090000000000000009; };
 			A10000090000000000000009 /* ViewSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000100000000000000010; };
 		A10000060000000000000006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000060000000000000006; };
@@ -23,6 +24,7 @@
 		A20000030000000000000003 /* NotchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchViewModel.swift; sourceTree = "<group>"; };
 		A20000040000000000000004 /* NotchContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchContentView.swift; sourceTree = "<group>"; };
 		A20000050000000000000005 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
+		A20000110000000000000011 /* RuntimeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeTransport.swift; sourceTree = "<group>"; };
 			A20000090000000000000009 /* SavedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedViews.swift; sourceTree = "<group>"; };
 			A20000100000000000000010 /* ViewSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewSwitcher.swift; sourceTree = "<group>"; };
 		A20000060000000000000006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 				A20000030000000000000003 /* NotchViewModel.swift */,
 				A20000040000000000000004 /* NotchContentView.swift */,
 				A20000050000000000000005 /* NotchShape.swift */,
+				A20000110000000000000011 /* RuntimeTransport.swift */,
 					A20000090000000000000009 /* SavedViews.swift */,
 					A20000100000000000000010 /* ViewSwitcher.swift */,
 				A20000060000000000000006 /* Assets.xcassets */,
@@ -169,6 +172,7 @@
 				A10000030000000000000003 /* NotchViewModel.swift in Sources */,
 				A10000040000000000000004 /* NotchContentView.swift in Sources */,
 				A10000050000000000000005 /* NotchShape.swift in Sources */,
+				A10000110000000000000011 /* RuntimeTransport.swift in Sources */,
 					A10000080000000000000008 /* SavedViews.swift in Sources */,
 					A10000090000000000000009 /* ViewSwitcher.swift in Sources */,
 			);

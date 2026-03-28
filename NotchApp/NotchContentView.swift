@@ -45,6 +45,9 @@ struct NotchContentView: View {
             anchor: .top
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task(id: vm.viewManager.layoutSnapshot()) {
+            vm.syncWidgetRuntimeLayouts()
+        }
     }
 
     private var expandedContent: some View {
@@ -598,9 +601,6 @@ private struct RuntimeWidgetSurface: View {
                     isEditing: vm.isEditingLayout
                 )
             }
-        }
-        .onDisappear {
-            vm.widgetRuntime.unmount(instanceID: widget.id)
         }
     }
 

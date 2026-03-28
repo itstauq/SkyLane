@@ -197,6 +197,7 @@ private struct RuntimeMountedWidget {
     var span: Int
     var isEditing: Bool
     var isDevelopment: Bool
+    var sessionID: String?
 
     var environment: RuntimeEnvironmentPayload {
         RuntimeEnvironmentPayload(
@@ -211,24 +212,49 @@ private struct RuntimeMountedWidget {
     }
 }
 
-private struct RuntimeRequestEnvelope: Codable {
-    var requestID: String?
-    var type: String
+private struct RuntimeLegacyLoadParams: Encodable {
+    var widgetID: String?
+    var bundlePath: String?
+}
+
+private struct RuntimeMountParams: Encodable {
+    var widgetId: String
+    var instanceId: String
+    var bundlePath: String
+    var forceReload: Bool?
+}
+
+private struct RuntimeMountResult: Decodable {
+    var sessionId: String
+}
+
+private struct RuntimeTerminateParams: Encodable {
+    var instanceId: String
+    var sessionId: String
+}
+
+private struct RuntimeLegacyRenderParams: Encodable {
     var widgetID: String?
     var instanceID: String?
-    var bundlePath: String?
+    var environment: RuntimeEnvironmentPayload?
+}
+
+private struct RuntimeLegacyActionParams: Encodable {
+    var widgetID: String?
+    var instanceID: String?
     var actionID: String?
     var payload: RuntimeActionPayload?
     var environment: RuntimeEnvironmentPayload?
 }
 
-private struct RuntimeResponseEnvelope: Codable {
-    var requestID: String?
-    var type: String
+private struct RuntimeLegacyRenderResult: Decodable {
+    var tree: RuntimeRenderNode
+}
+
+private struct RuntimeLogNotificationParams: Decodable {
     var widgetID: String?
     var level: String?
     var message: String?
-    var tree: RuntimeRenderNode?
 }
 
 @MainActor
@@ -239,16 +265,24 @@ final class WidgetRuntimeController {
     var isAvailable = true
 
     private let log = FileLog()
-    private var process: Process?
-    private var stdinHandle: FileHandle?
-    private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
-    private var pending: [String: CheckedContinuation<RuntimeResponseEnvelope, Error>] = [:]
+    private let transport = RuntimeTransport()
     private var loadedWidgetIDs: Set<String> = []
     private var mountedWidgets: [UUID: RuntimeMountedWidget] = [:]
     private var developmentWidgetIDs: Set<String> = []
-    private let jsonEncoder = JSONEncoder()
+    private var forceReloadWidgetIDs: Set<String> = []
     private let jsonDecoder = JSONDecoder()
+
+    init() {
+        transport.notificationHandler = { [weak self] notification in
+            self?.handle(notification)
+        }
+        transport.stderrHandler = { [weak self] line in
+            self?.log.write("Widget helper stderr: \(line)")
+        }
+        transport.terminationHandler = { [weak self] description in
+            self?.handleProcessTermination(description: description)
+        }
+    }
 
     func isMounted(instanceID: UUID) -> Bool {
         mountedWidgets[instanceID] != nil
@@ -261,19 +295,47 @@ final class WidgetRuntimeController {
             viewID: viewID,
             span: span,
             isEditing: isEditing,
-            isDevelopment: developmentWidgetIDs.contains(definition.id)
+            isDevelopment: developmentWidgetIDs.contains(definition.id),
+            sessionID: nil
         )
 
         Task {
-            await ensureLoaded(definition)
-            await renderInstance(instanceID)
+            await mountAndRender(instanceID)
         }
     }
 
     func unmount(instanceID: UUID) {
-        mountedWidgets.removeValue(forKey: instanceID)
+        let mounted = mountedWidgets.removeValue(forKey: instanceID)
         renderTreeByInstance.removeValue(forKey: instanceID)
         errorByInstance.removeValue(forKey: instanceID)
+
+        guard let mounted, let sessionID = mounted.sessionID else { return }
+
+        Task {
+            do {
+                _ = try await sendRequest(
+                    "terminate",
+                    params: RuntimeTerminateParams(
+                        instanceId: instanceID.uuidString,
+                        sessionId: sessionID
+                    )
+                )
+            } catch {
+                log.write("Widget runtime: terminate failed for \(mounted.definition.id): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func reconcileMountedInstances(with layoutsByViewID: [UUID: ViewLayout]) {
+        let activeInstanceIDs = Set(
+            layoutsByViewID.values.flatMap { layout in
+                layout.widgets.map(\.id)
+            }
+        )
+        let staleInstanceIDs = mountedWidgets.keys.filter { !activeInstanceIDs.contains($0) }
+        for instanceID in staleInstanceIDs {
+            unmount(instanceID: instanceID)
+        }
     }
 
     func update(instanceID: UUID, viewID: UUID, span: Int, isEditing: Bool) {
@@ -295,12 +357,10 @@ final class WidgetRuntimeController {
             await ensureLoaded(mounted.definition)
             do {
                 _ = try await sendRequest(
-                    RuntimeRequestEnvelope(
-                        requestID: UUID().uuidString,
-                        type: "action",
+                    "action",
+                    params: RuntimeLegacyActionParams(
                         widgetID: mounted.definition.id,
                         instanceID: instanceID.uuidString,
-                        bundlePath: nil,
                         actionID: actionID,
                         payload: payload,
                         environment: mounted.environment
@@ -367,42 +427,93 @@ final class WidgetRuntimeController {
         }
     }
 
-    private func renderInstance(_ instanceID: UUID) async {
-        guard let mounted = mountedWidgets[instanceID] else { return }
-        await ensureLoaded(mounted.definition)
-
+    private func mountAndRender(_ instanceID: UUID) async {
         do {
-            let response = try await sendRequest(
-                RuntimeRequestEnvelope(
-                    requestID: UUID().uuidString,
-                    type: "render",
-                    widgetID: mounted.definition.id,
-                    instanceID: instanceID.uuidString,
-                    bundlePath: nil,
-                    actionID: nil,
-                    payload: nil,
-                    environment: mounted.environment
-                )
-            )
-
-            if let tree = response.tree {
-                renderTreeByInstance[instanceID] = tree.normalizedForRuntime()
-                errorByInstance.removeValue(forKey: instanceID)
-            } else if let message = response.message {
-                errorByInstance[instanceID] = message
-            }
+            guard let _ = try await ensureMountedSession(instanceID) else { return }
+            await renderInstance(instanceID)
         } catch {
             errorByInstance[instanceID] = error.localizedDescription
         }
     }
 
-    private func ensureLoaded(_ definition: WidgetDefinition) async {
+    private func ensureMountedSession(_ instanceID: UUID) async throws -> RuntimeMountedWidget? {
+        guard var mounted = mountedWidgets[instanceID] else { return nil }
+
+        if mounted.sessionID != nil {
+            return mounted
+        }
+
+        guard await ensureBundleAvailable(mounted.definition) else {
+            errorByInstance[instanceID] = "This widget is currently unavailable."
+            return nil
+        }
+
+        let response = try await sendRequest(
+            "mount",
+            params: RuntimeMountParams(
+                widgetId: mounted.definition.id,
+                instanceId: instanceID.uuidString,
+                bundlePath: mounted.definition.bundleFileURL.path,
+                forceReload: forceReloadWidgetIDs.contains(mounted.definition.id) ? true : nil
+            )
+        )
+        let result = try decode(response, as: RuntimeMountResult.self)
+        loadedWidgetIDs.insert(mounted.definition.id)
+        forceReloadWidgetIDs.remove(mounted.definition.id)
+        isAvailable = true
+
+        guard var latestMounted = mountedWidgets[instanceID] else { return nil }
+        latestMounted.sessionID = result.sessionId
+        latestMounted.isDevelopment = developmentWidgetIDs.contains(latestMounted.definition.id)
+        mountedWidgets[instanceID] = latestMounted
+        mounted = latestMounted
+        return mounted
+    }
+
+    private func renderInstance(_ instanceID: UUID) async {
+        let mounted: RuntimeMountedWidget
+        do {
+            guard let resolvedMounted = try await ensureMountedSession(instanceID) else { return }
+            mounted = resolvedMounted
+        } catch {
+            errorByInstance[instanceID] = error.localizedDescription
+            return
+        }
+
+        await ensureLoaded(mounted.definition)
+
+        do {
+            let response = try await sendRequest(
+                "render",
+                params: RuntimeLegacyRenderParams(
+                    widgetID: mounted.definition.id,
+                    instanceID: instanceID.uuidString,
+                    environment: mounted.environment
+                )
+            )
+            let result = try decode(response, as: RuntimeLegacyRenderResult.self)
+            renderTreeByInstance[instanceID] = result.tree.normalizedForRuntime()
+            errorByInstance.removeValue(forKey: instanceID)
+        } catch {
+            errorByInstance[instanceID] = error.localizedDescription
+        }
+    }
+
+    private func ensureBundleAvailable(_ definition: WidgetDefinition) async -> Bool {
         if !FileManager.default.fileExists(atPath: definition.bundleFileURL.path) {
             await rebuild(definition)
         }
 
         guard FileManager.default.fileExists(atPath: definition.bundleFileURL.path) else {
             isAvailable = false
+            return false
+        }
+
+        return true
+    }
+
+    private func ensureLoaded(_ definition: WidgetDefinition) async {
+        guard await ensureBundleAvailable(definition) else {
             return
         }
 
@@ -410,18 +521,14 @@ final class WidgetRuntimeController {
 
         do {
             _ = try await sendRequest(
-                RuntimeRequestEnvelope(
-                    requestID: UUID().uuidString,
-                    type: "load",
+                "load",
+                params: RuntimeLegacyLoadParams(
                     widgetID: definition.id,
-                    instanceID: nil,
-                    bundlePath: definition.bundleFileURL.path,
-                    actionID: nil,
-                    payload: nil,
-                    environment: nil
+                    bundlePath: definition.bundleFileURL.path
                 )
             )
             loadedWidgetIDs.insert(definition.id)
+            isAvailable = true
         } catch {
             isAvailable = false
             log.write("Widget runtime: load failed for \(definition.id): \(error.localizedDescription)")
@@ -456,6 +563,10 @@ final class WidgetRuntimeController {
         }
     }
 
+    func shutdown() {
+        transport.sendBestEffortNotificationIfRunning("shutdown")
+    }
+
     private func waitForProcessExit(_ process: Process) async throws -> Int32 {
         try await withCheckedThrowingContinuation { continuation in
             let lock = NSLock()
@@ -478,12 +589,7 @@ final class WidgetRuntimeController {
         }
     }
 
-    private func ensureProcess() async throws {
-        if process?.isRunning == true, stdinHandle != nil {
-            return
-        }
-        let newProcess = Process()
-
+    private func processConfiguration() throws -> RuntimeTransportProcessConfiguration {
         if let bundledRuntimeRoot = RepoPaths.bundledWidgetRuntimeRoot,
            FileManager.default.fileExists(atPath: bundledRuntimeRoot.path) {
             let bundledNodeURL = bundledRuntimeRoot
@@ -502,156 +608,59 @@ final class WidgetRuntimeController {
                 )
             }
 
-            newProcess.executableURL = bundledNodeURL
-            newProcess.arguments = [bundledRuntimeURL.path]
-            newProcess.currentDirectoryURL = bundledRuntimeRoot
-        } else {
-            let launcherURL = RepoPaths.developmentWidgetRuntimeRoot.appendingPathComponent("runtime-launcher")
-            guard FileManager.default.fileExists(atPath: launcherURL.path) else {
-                throw NSError(domain: "NotchWidgetRuntime", code: 1, userInfo: [NSLocalizedDescriptionKey: "Widget runtime launcher missing."])
-            }
-
-            newProcess.executableURL = launcherURL
-            newProcess.arguments = ["v2"]
-            newProcess.currentDirectoryURL = RepoPaths.developmentWidgetRuntimeRoot
+            return RuntimeTransportProcessConfiguration(
+                executableURL: bundledNodeURL,
+                arguments: [bundledRuntimeURL.path],
+                currentDirectoryURL: bundledRuntimeRoot
+            )
         }
 
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        newProcess.standardInput = stdinPipe
-        newProcess.standardOutput = stdoutPipe
-        newProcess.standardError = stderrPipe
-        newProcess.terminationHandler = { [weak self] process in
-            Task { @MainActor [weak self] in
-                self?.handleProcessTermination(process)
-            }
+        let launcherURL = RepoPaths.developmentWidgetRuntimeRoot.appendingPathComponent("runtime-launcher")
+        guard FileManager.default.fileExists(atPath: launcherURL.path) else {
+            throw NSError(domain: "NotchWidgetRuntime", code: 1, userInfo: [NSLocalizedDescriptionKey: "Widget runtime launcher missing."])
         }
 
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            if data.isEmpty { return }
-            Task { @MainActor [weak self] in
-                self?.appendStdout(data)
-            }
-        }
-
-        stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            if data.isEmpty { return }
-            Task { @MainActor [weak self] in
-                self?.appendStderr(data)
-            }
-        }
-
-        try newProcess.run()
-        process = newProcess
-        stdinHandle = stdinPipe.fileHandleForWriting
-        isAvailable = true
+        return RuntimeTransportProcessConfiguration(
+            executableURL: launcherURL,
+            arguments: ["v2"],
+            currentDirectoryURL: RepoPaths.developmentWidgetRuntimeRoot
+        )
     }
 
-    private func handleProcessTermination(_ terminatedProcess: Process) {
-        guard process === terminatedProcess else { return }
-
-        let status = terminatedProcess.terminationStatus
-        let reason = terminatedProcess.terminationReason
-        let description = "Widget runtime exited unexpectedly (reason: \(reason.rawValue), status: \(status))."
-
-        stdoutBuffer.removeAll(keepingCapacity: false)
-        stderrBuffer.removeAll(keepingCapacity: false)
-        stdinHandle = nil
-        process = nil
+    private func handleProcessTermination(description: String) {
+        log.write(description)
         loadedWidgetIDs.removeAll()
         isAvailable = false
-        failPendingRequests(message: description)
-    }
-
-    private func failPendingRequests(message: String) {
-        let error = NSError(
-            domain: "NotchWidgetRuntime",
-            code: 4,
-            userInfo: [NSLocalizedDescriptionKey: message]
-        )
-        let continuations = pending.values
-        pending.removeAll()
-        for continuation in continuations {
-            continuation.resume(throwing: error)
+        for instanceID in mountedWidgets.keys {
+            mountedWidgets[instanceID]?.sessionID = nil
         }
     }
 
-    private func appendStdout(_ data: Data) {
-        stdoutBuffer.append(data)
-        drain(buffer: &stdoutBuffer)
-    }
-
-    private func appendStderr(_ data: Data) {
-        stderrBuffer.append(data)
-        while let range = stderrBuffer.range(of: Data([0x0A])) {
-            let lineData = stderrBuffer.subdata(in: 0..<range.lowerBound)
-            stderrBuffer.removeSubrange(0...range.lowerBound)
-            let line = String(decoding: lineData, as: UTF8.self)
-            if !line.isEmpty {
-                log.write("Widget helper stderr: \(line)")
+    private func handle(_ notification: RuntimeTransportNotification) {
+        if notification.method == "log" {
+            guard let params = try? decode(notification.params, as: RuntimeLogNotificationParams.self) else {
+                return
             }
+            let level = params.level ?? "info"
+            let widgetID = params.widgetID ?? "unknown"
+            log.write("Widget \(widgetID) [\(level)]: \(params.message ?? "")")
         }
     }
 
-    private func drain(buffer: inout Data) {
-        while let range = buffer.range(of: Data([0x0A])) {
-            let lineData = buffer.subdata(in: 0..<range.lowerBound)
-            buffer.removeSubrange(0...range.lowerBound)
-            guard !lineData.isEmpty else { continue }
-
-            do {
-                let envelope = try jsonDecoder.decode(RuntimeResponseEnvelope.self, from: lineData)
-                handle(envelope)
-            } catch {
-                let line = String(decoding: lineData, as: UTF8.self)
-                log.write("Widget helper decode error: \(line)")
-            }
-        }
+    private func sendRequest<Params: Encodable>(_ method: String, params: Params? = nil) async throws -> RuntimeJSONValue? {
+        let configuration = try processConfiguration()
+        let response = try await transport.sendRequest(method, params: params, configuration: configuration)
+        isAvailable = true
+        return response
     }
 
-    private func handle(_ envelope: RuntimeResponseEnvelope) {
-        if envelope.type == "log" {
-            let level = envelope.level ?? "info"
-            let widgetID = envelope.widgetID ?? "unknown"
-            log.write("Widget \(widgetID) [\(level)]: \(envelope.message ?? "")")
-            return
-        }
-
-        guard let requestID = envelope.requestID,
-              let continuation = pending.removeValue(forKey: requestID) else { return }
-        continuation.resume(returning: envelope)
-    }
-
-    private func sendRequest(_ request: RuntimeRequestEnvelope) async throws -> RuntimeResponseEnvelope {
-        try await ensureProcess()
-        guard let requestID = request.requestID else {
-            throw NSError(domain: "NotchWidgetRuntime", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing request id."])
-        }
-        guard let stdinHandle else {
-            throw NSError(domain: "NotchWidgetRuntime", code: 3, userInfo: [NSLocalizedDescriptionKey: "Widget runtime stdin unavailable."])
-        }
-
-        let data = try jsonEncoder.encode(request)
-        var line = data
-        line.append(0x0A)
-
-        return try await withCheckedThrowingContinuation { continuation in
-            pending[requestID] = continuation
-
-            do {
-                try stdinHandle.write(contentsOf: line)
-            } catch {
-                pending.removeValue(forKey: requestID)
-                continuation.resume(throwing: error)
-            }
-        }
+    private func decode<Result: Decodable>(_ value: RuntimeJSONValue?, as type: Result.Type) throws -> Result {
+        try (value ?? .null).decode(as: type, using: jsonDecoder)
     }
 
     private func handleBuildSuccess(widgetID: String) async {
         loadedWidgetIDs.remove(widgetID)
+        forceReloadWidgetIDs.insert(widgetID)
 
         let refreshedDefinitions = WidgetCatalog.discover(log: log)
         let matchingDefinition = refreshedDefinitions.first(where: { $0.id == widgetID })
@@ -667,6 +676,7 @@ final class WidgetRuntimeController {
             .map(\.instanceID)
 
         guard let matchingDefinition else {
+            forceReloadWidgetIDs.remove(widgetID)
             for instanceID in affectedInstances {
                 errorByInstance[instanceID] = "This widget is currently unavailable."
             }
@@ -674,6 +684,7 @@ final class WidgetRuntimeController {
         }
 
         guard FileManager.default.fileExists(atPath: matchingDefinition.bundleFileURL.path) else {
+            forceReloadWidgetIDs.remove(widgetID)
             for instanceID in affectedInstances {
                 errorByInstance[instanceID] = "This widget is currently unavailable."
             }
@@ -681,6 +692,7 @@ final class WidgetRuntimeController {
         }
 
         for instanceID in affectedInstances {
+            mountedWidgets[instanceID]?.sessionID = nil
             await renderInstance(instanceID)
         }
     }
@@ -727,6 +739,10 @@ final class NotchViewModel {
     }
 
     init() {}
+
+    func syncWidgetRuntimeLayouts() {
+        widgetRuntime.reconcileMountedInstances(with: viewManager.layoutSnapshot())
+    }
 
     func refreshWidgetDefinitions() {
         viewManager.reloadWidgetDefinitions()
