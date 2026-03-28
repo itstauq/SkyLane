@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { beginEpoch, pruneStaleCallbacks, register } from "./callback-registry.mjs";
 
 const require = createRequire(import.meta.url);
+const { compare } = require("fast-json-patch");
 const ReactReconciler = require("react-reconciler");
 const { DefaultEventPriority } = require("react-reconciler/constants");
 
@@ -92,6 +93,14 @@ function snapshotRoot(children) {
   };
 }
 
+function emitCurrentTree(container, kind, data) {
+  container.onCommit?.({
+    kind,
+    renderRevision: container.renderRevision,
+    data: structuredClone(data),
+  });
+}
+
 const hostConfig = {
   now: Date.now,
   getRootHostContext() {
@@ -110,12 +119,18 @@ const hostConfig = {
     beginEpoch();
     pruneStaleCallbacks();
 
+    const nextTree = snapshotRoot(container.children);
     container.renderRevision += 1;
-    container.onCommit?.({
-      kind: "full",
-      renderRevision: container.renderRevision,
-      data: snapshotRoot(container.children),
-    });
+
+    if (container.previousTree == null) {
+      container.previousTree = nextTree;
+      emitCurrentTree(container, "full", nextTree);
+      return;
+    }
+
+    const patch = compare(container.previousTree, nextTree);
+    container.previousTree = nextTree;
+    emitCurrentTree(container, "patch", patch);
   },
   createInstance(type, rawProps) {
     return {
@@ -189,6 +204,7 @@ const reconciler = ReactReconciler(hostConfig);
 export function createRenderer() {
   const container = {
     children: [],
+    previousTree: null,
     renderRevision: 0,
     onCommit: null,
   };
@@ -217,6 +233,13 @@ export function createRenderer() {
     },
     onCommit(callback) {
       container.onCommit = callback;
+    },
+    emitFullTree() {
+      if (container.previousTree == null || container.renderRevision === 0) {
+        return;
+      }
+
+      emitCurrentTree(container, "full", container.previousTree);
     },
   };
 }

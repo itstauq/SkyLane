@@ -245,6 +245,11 @@ private struct RuntimeCallbackParams: Encodable {
     var payload: RuntimeJSONValue
 }
 
+private struct RuntimeRequestFullTreeParams: Encodable {
+    var instanceId: String
+    var sessionId: String
+}
+
 private struct RuntimeLegacyRenderParams: Encodable {
     var widgetID: String?
     var instanceID: String?
@@ -654,22 +659,27 @@ final class WidgetRuntimeController {
     private func handle(_ notification: RuntimeTransportNotification) {
         if notification.method == "render" {
             guard let params = try? decode(notification.params, as: WidgetRenderNotificationParams.self),
-                  let instanceID = UUID(uuidString: params.instanceId),
-                  params.kind == "full" else {
+                  let instanceID = UUID(uuidString: params.instanceId) else {
                 return
             }
 
-            guard sessionManager.acceptRender(
+            switch sessionManager.acceptRender(
                 instanceID: instanceID,
                 sessionId: params.sessionId,
-                renderRevision: params.renderRevision
-            ) else {
+                kind: params.kind,
+                renderRevision: params.renderRevision,
+                data: params.data
+            ) {
+            case .ignored:
+                return
+            case .applied(let tree):
+                renderTreeByInstance[instanceID] = tree
+                errorByInstance.removeValue(forKey: instanceID)
+                return
+            case .requestFullTree(let reason):
+                requestFullTree(for: instanceID, sessionID: params.sessionId, reason: reason)
                 return
             }
-
-            renderTreeByInstance[instanceID] = params.data
-            errorByInstance.removeValue(forKey: instanceID)
-            return
         }
 
         if notification.method == "error" {
@@ -707,6 +717,23 @@ final class WidgetRuntimeController {
 
     private func decode<Result: Decodable>(_ value: RuntimeJSONValue?, as type: Result.Type) throws -> Result {
         try (value ?? .null).decode(as: type, using: jsonDecoder)
+    }
+
+    private func requestFullTree(for instanceID: UUID, sessionID: String, reason: String) {
+        log.write("Widget runtime: requesting full tree for \(instanceID.uuidString): \(reason)")
+
+        do {
+            try transport.sendNotification(
+                "requestFullTree",
+                params: RuntimeRequestFullTreeParams(
+                    instanceId: instanceID.uuidString,
+                    sessionId: sessionID
+                ),
+                configuration: try processConfiguration()
+            )
+        } catch {
+            log.write("Widget runtime: requestFullTree failed for \(instanceID.uuidString): \(error.localizedDescription)")
+        }
     }
 
     private func node(at path: [Int], in root: RenderNodeV2) -> RenderNodeV2? {

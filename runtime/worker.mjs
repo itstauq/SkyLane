@@ -159,6 +159,11 @@ parentPort.on("message", (message) => {
     return;
   }
 
+  if (message.method === "requestFullTree") {
+    renderer.emitFullTree();
+    return;
+  }
+
   if (message.method === "shutdown") {
     clearCallbacks();
     process.exit(0);
