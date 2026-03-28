@@ -1,11 +1,14 @@
 import readline from "node:readline";
 import { createRequire } from "node:module";
+import { Worker } from "node:worker_threads";
 
 const require = createRequire(import.meta.url);
 const widgets = new Map();
 const widgetStates = new Map();
-const sessions = new Map();
+const workers = new Map();
 let sessionCounter = 0;
+let isShuttingDown = false;
+let shutdownExitCode = 0;
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -38,6 +41,10 @@ function requireString(value, fieldName) {
     throw rpcError(-32602, `Missing or invalid '${fieldName}'.`);
   }
   return value;
+}
+
+function sessionIdFor(instanceId) {
+  return `${instanceId}:${++sessionCounter}`;
 }
 
 function widgetLogger(widgetID) {
@@ -156,45 +163,285 @@ function removeInstanceState(widgetID, instanceID) {
   }
 }
 
-function mountWidget(params = {}) {
-  const widgetID = requireString(params.widgetId, "widgetId");
-  const instanceID = requireString(params.instanceId, "instanceId");
-  const bundlePath = requireString(params.bundlePath, "bundlePath");
-  const forceReload = params.forceReload === true;
-
-  loadWidget(widgetID, bundlePath, { forceReload });
-  const { mod } = ensureWidget(widgetID);
-  if (typeof mod.default !== "function") {
-    throw rpcError(-32003, `Widget ${widgetID} must export a default function.`);
+function errorPayload(error) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack,
+    };
   }
 
-  stateFor(widgetID, instanceID, mod);
-  const sessionId = `${instanceID}:${++sessionCounter}`;
-  sessions.set(instanceID, { widgetID, sessionId });
-  return { sessionId };
+  return {
+    message: String(error),
+  };
 }
 
-function terminateWidget(params = {}) {
-  const instanceID = requireString(params.instanceId, "instanceId");
-  const sessionID = requireString(params.sessionId, "sessionId");
-  const session = sessions.get(instanceID);
-  if (!session) {
+function reportWorkerError(entry, payload) {
+  if (entry.didReportError) {
+    return;
+  }
+
+  entry.didReportError = true;
+  notify("error", {
+    instanceId: entry.instanceId,
+    sessionId: entry.sessionId,
+    error: payload,
+  });
+}
+
+function maybeFinishShutdown() {
+  if (isShuttingDown && workers.size === 0) {
+    process.exit(shutdownExitCode);
+  }
+}
+
+function finalizeWorker(instanceId) {
+  const entry = workers.get(instanceId);
+  if (!entry) {
     return null;
   }
 
-  if (session.sessionId !== sessionID) {
+  workers.delete(instanceId);
+  if (entry.shutdownTimer) {
+    clearTimeout(entry.shutdownTimer);
+  }
+  maybeFinishShutdown();
+  return entry;
+}
+
+function beginWorkerShutdown(entry) {
+  if (entry.isTerminating) {
+    return;
+  }
+
+  entry.isTerminating = true;
+
+  try {
+    entry.worker.postMessage({
+      jsonrpc: "2.0",
+      method: "shutdown",
+      params: {},
+    });
+  } catch {
+    // The worker may already be gone.
+  }
+
+  entry.shutdownTimer = setTimeout(() => {
+    entry.worker.terminate().catch(() => {});
+  }, 500);
+  entry.shutdownTimer.unref?.();
+}
+
+function failPendingMount(entry, error) {
+  const payload = errorPayload(error);
+  reportWorkerError(entry, payload);
+
+  if (entry.mountRequestId !== undefined) {
+    const requestId = entry.mountRequestId;
+    entry.mountRequestId = undefined;
+    respondError(requestId, -32010, payload.message);
+  }
+
+  beginWorkerShutdown(entry);
+}
+
+function handleWorkerMessage(instanceId, message) {
+  const entry = workers.get(instanceId);
+  if (!entry || message?.jsonrpc !== "2.0" || typeof message.method !== "string") {
+    return;
+  }
+
+  switch (message.method) {
+    case "render": {
+      entry.didInitialRender = true;
+      notify("render", {
+        instanceId: entry.instanceId,
+        sessionId: entry.sessionId,
+        kind: message.params?.kind ?? "full",
+        renderRevision: message.params?.renderRevision ?? 1,
+        data: message.params?.data ?? null,
+      });
+
+      if (entry.mountRequestId !== undefined) {
+        const requestId = entry.mountRequestId;
+        entry.mountRequestId = undefined;
+        respond(requestId, { sessionId: entry.sessionId });
+      }
+      break;
+    }
+
+    case "log":
+      notify("log", {
+        instanceId: entry.instanceId,
+        sessionId: entry.sessionId,
+        level: message.params?.level ?? "info",
+        message: message.params?.message ?? "",
+      });
+      break;
+
+    case "error": {
+      const payload = {
+        message: message.params?.error?.message ?? "Worker error",
+        stack: message.params?.error?.stack,
+      };
+      reportWorkerError(entry, payload);
+
+      if (!entry.didInitialRender && entry.mountRequestId !== undefined) {
+        const requestId = entry.mountRequestId;
+        entry.mountRequestId = undefined;
+        respondError(requestId, -32010, payload.message);
+      }
+
+      beginWorkerShutdown(entry);
+      break;
+    }
+
+    default:
+      notify("log", {
+        instanceId: entry.instanceId,
+        sessionId: entry.sessionId,
+        level: "warn",
+        message: `Unsupported worker message '${message.method}'.`,
+      });
+      break;
+  }
+}
+
+function handleWorkerError(instanceId, error) {
+  const entry = workers.get(instanceId);
+  if (!entry) {
+    return;
+  }
+
+  if (!entry.didInitialRender) {
+    failPendingMount(entry, error);
+    return;
+  }
+
+  reportWorkerError(entry, errorPayload(error));
+  beginWorkerShutdown(entry);
+}
+
+function handleWorkerExit(instanceId, code) {
+  const entry = finalizeWorker(instanceId);
+  if (!entry) {
+    return;
+  }
+
+  if (entry.terminateRequestId !== undefined) {
+    respond(entry.terminateRequestId, null);
+    entry.terminateRequestId = undefined;
+  }
+
+  if (!entry.didInitialRender && entry.mountRequestId !== undefined) {
+    const payload = {
+      message: `Worker exited before the first render (code ${code}).`,
+    };
+    reportWorkerError(entry, payload);
+    respondError(entry.mountRequestId, -32011, payload.message);
+    return;
+  }
+
+  if (!entry.isTerminating && code !== 0) {
+    reportWorkerError(entry, {
+      message: `Worker exited unexpectedly (code ${code}).`,
+    });
+  }
+}
+
+function beginShutdown(exitCode = 0) {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  shutdownExitCode = exitCode;
+
+  if (workers.size === 0) {
+    process.exit(exitCode);
+    return;
+  }
+
+  for (const entry of workers.values()) {
+    beginWorkerShutdown(entry);
+  }
+
+  const hardStopTimer = setTimeout(() => {
+    for (const entry of workers.values()) {
+      entry.worker.terminate().catch(() => {});
+    }
+  }, 550);
+  hardStopTimer.unref?.();
+}
+
+function mountWidget(params = {}, requestId) {
+  const widgetID = requireString(params.widgetId, "widgetId");
+  const instanceID = requireString(params.instanceId, "instanceId");
+  const bundlePath = requireString(params.bundlePath, "bundlePath");
+  if (workers.has(instanceID)) {
+    throw rpcError(-32005, `Instance ${instanceID} is already mounted.`);
+  }
+
+  const sessionId = sessionIdFor(instanceID);
+  const entry = {
+    worker: new Worker(new URL("./worker.mjs", import.meta.url), {
+      workerData: {
+        widgetId: widgetID,
+        instanceId: instanceID,
+        bundlePath,
+        props: params.props ?? {},
+        cachedStorage: params.cachedStorage ?? {},
+        sessionId,
+      },
+      resourceLimits: {
+        maxOldGenerationSizeMb: 64,
+      },
+    }),
+    widgetId: widgetID,
+    instanceId: instanceID,
+    sessionId,
+    mountRequestId: requestId,
+    didInitialRender: false,
+    didReportError: false,
+    isTerminating: false,
+    terminateRequestId: undefined,
+    shutdownTimer: null,
+  };
+
+  workers.set(instanceID, entry);
+
+  entry.worker.on("message", (message) => {
+    handleWorkerMessage(instanceID, message);
+  });
+  entry.worker.on("error", (error) => {
+    handleWorkerError(instanceID, error);
+  });
+  entry.worker.on("exit", (code) => {
+    handleWorkerExit(instanceID, code);
+  });
+
+  return entry;
+}
+
+function terminateWidget(params = {}, requestId) {
+  const instanceID = requireString(params.instanceId, "instanceId");
+  const sessionID = requireString(params.sessionId, "sessionId");
+  const entry = workers.get(instanceID);
+  if (!entry) {
+    return true;
+  }
+
+  if (entry.sessionId !== sessionID) {
     throw rpcError(-32004, `Session mismatch for instance ${instanceID}.`);
   }
 
-  removeInstanceState(session.widgetID, instanceID);
-  sessions.delete(instanceID);
-  return null;
+  entry.terminateRequestId = requestId;
+  beginWorkerShutdown(entry);
+  return false;
 }
 
 function shutdownRuntime() {
-  sessions.clear();
-  widgetStates.clear();
-  setImmediate(() => process.exit(0));
+  beginShutdown(0);
 }
 
 function handleLegacyLoad(params = {}) {
@@ -225,6 +472,10 @@ const rl = readline.createInterface({
   crlfDelay: Infinity,
 });
 
+process.stdin.on("end", () => {
+  beginShutdown(0);
+});
+
 for await (const line of rl) {
   if (!line.trim()) continue;
 
@@ -243,11 +494,14 @@ for await (const line of rl) {
 
   try {
     switch (message.method) {
-      case "mount":
-        respond(message.id, mountWidget(message.params));
+      case "mount": {
+        mountWidget(message.params, message.id);
         break;
+      }
       case "terminate":
-        respond(message.id, terminateWidget(message.params));
+        if (terminateWidget(message.params, message.id)) {
+          respond(message.id, null);
+        }
         break;
       case "shutdown":
         shutdownRuntime();
@@ -270,4 +524,8 @@ for await (const line of rl) {
     const messageText = error instanceof Error ? error.message : String(error);
     respondError(message.id ?? null, code, messageText);
   }
+}
+
+if (!isShuttingDown) {
+  beginShutdown(0);
 }

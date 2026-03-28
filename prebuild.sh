@@ -17,5 +17,6 @@ rm -rf "$DEST_ROOT"
 mkdir -p "$DEST_ROOT" "$DEST_ROOT/widgets"
 
 cp "$RUNTIME_ROOT/runtime-v2.mjs" "$DEST_ROOT/runtime-v2.mjs"
+cp "$RUNTIME_ROOT/worker.mjs" "$DEST_ROOT/worker.mjs"
 cp "$RUNTIME_ROOT/runtime-worker.mjs" "$DEST_ROOT/runtime-worker.mjs"
 cp -R "$RUNTIME_ROOT/.build/tools/node" "$DEST_ROOT/node"

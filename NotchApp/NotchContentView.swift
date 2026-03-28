@@ -578,7 +578,7 @@ private struct RuntimeWidgetSurface: View {
             if let error = vm.widgetRuntime.error(for: widget.id) {
                 runtimeErrorSurface(message: error)
             } else if let tree = vm.widgetRuntime.renderTree(for: widget.id) {
-                RuntimeNodeView(node: tree, vm: vm, instanceID: widget.id, tint: tint)
+                RuntimeV2NodeView(node: tree)
             } else {
                 runtimeLoadingSurface
             }
@@ -654,6 +654,36 @@ private struct RuntimeWidgetSurface: View {
         #else
         "This widget is currently unavailable. It may have been removed, disabled, or failed to load."
         #endif
+    }
+}
+
+private struct RuntimeV2NodeView: View {
+    var node: RenderNodeV2
+
+    var body: some View {
+        switch node.type {
+        case "Stack":
+            VStack(alignment: .leading, spacing: CGFloat(node.number("spacing") ?? 8)) {
+                ForEach(Array(node.children.enumerated()), id: \.offset) { _, child in
+                    RuntimeV2NodeView(node: child)
+                }
+            }
+        case "Inline":
+            HStack(spacing: CGFloat(node.number("spacing") ?? 8)) {
+                ForEach(Array(node.children.enumerated()), id: \.offset) { _, child in
+                    RuntimeV2NodeView(node: child)
+                }
+            }
+        case "Text", "__text":
+            Text(node.string("text") ?? "")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.72))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case "Spacer":
+            Spacer(minLength: 0)
+        default:
+            EmptyView()
+        }
     }
 }
 

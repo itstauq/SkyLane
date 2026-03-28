@@ -221,7 +221,12 @@ private struct RuntimeMountParams: Encodable {
     var widgetId: String
     var instanceId: String
     var bundlePath: String
-    var forceReload: Bool?
+    var props: RuntimeMountProps
+    var cachedStorage: [String: RuntimeJSONValue]
+}
+
+private struct RuntimeMountProps: Encodable {
+    var environment: RuntimeEnvironmentPayload
 }
 
 private struct RuntimeMountResult: Decodable {
@@ -253,6 +258,7 @@ private struct RuntimeLegacyRenderResult: Decodable {
 
 private struct RuntimeLogNotificationParams: Decodable {
     var widgetID: String?
+    var instanceId: String?
     var level: String?
     var message: String?
 }
@@ -260,16 +266,15 @@ private struct RuntimeLogNotificationParams: Decodable {
 @MainActor
 @Observable
 final class WidgetRuntimeController {
-    var renderTreeByInstance: [UUID: RuntimeRenderNode] = [:]
+    var renderTreeByInstance: [UUID: RenderNodeV2] = [:]
     var errorByInstance: [UUID: String] = [:]
     var isAvailable = true
 
     private let log = FileLog()
     private let transport = RuntimeTransport()
-    private var loadedWidgetIDs: Set<String> = []
+    private let sessionManager = WidgetSessionManager()
     private var mountedWidgets: [UUID: RuntimeMountedWidget] = [:]
     private var developmentWidgetIDs: Set<String> = []
-    private var forceReloadWidgetIDs: Set<String> = []
     private let jsonDecoder = JSONDecoder()
 
     init() {
@@ -298,18 +303,22 @@ final class WidgetRuntimeController {
             isDevelopment: developmentWidgetIDs.contains(definition.id),
             sessionID: nil
         )
+        errorByInstance.removeValue(forKey: instanceID)
+        sessionManager.beginMount(instanceID: instanceID)
 
         Task {
-            await mountAndRender(instanceID)
+            await mountInstance(instanceID)
         }
     }
 
     func unmount(instanceID: UUID) {
         let mounted = mountedWidgets.removeValue(forKey: instanceID)
+        let sessionID = sessionManager.knownSessionID(for: instanceID)
+        sessionManager.remove(instanceID: instanceID)
         renderTreeByInstance.removeValue(forKey: instanceID)
         errorByInstance.removeValue(forKey: instanceID)
 
-        guard let mounted, let sessionID = mounted.sessionID else { return }
+        guard let mounted, let sessionID else { return }
 
         Task {
             do {
@@ -347,33 +356,17 @@ final class WidgetRuntimeController {
         mountedWidgets[instanceID] = mounted
 
         Task {
-            await renderInstance(instanceID)
+            await ensureMountedWorker(instanceID)
         }
     }
 
     func triggerAction(_ actionID: String, payload: RuntimeActionPayload? = nil, for instanceID: UUID) {
-        guard let mounted = mountedWidgets[instanceID] else { return }
-        Task {
-            await ensureLoaded(mounted.definition)
-            do {
-                _ = try await sendRequest(
-                    "action",
-                    params: RuntimeLegacyActionParams(
-                        widgetID: mounted.definition.id,
-                        instanceID: instanceID.uuidString,
-                        actionID: actionID,
-                        payload: payload,
-                        environment: mounted.environment
-                    )
-                )
-                await renderInstance(instanceID)
-            } catch {
-                errorByInstance[instanceID] = error.localizedDescription
-            }
-        }
+        _ = actionID
+        _ = payload
+        _ = instanceID
     }
 
-    func renderTree(for instanceID: UUID) -> RuntimeRenderNode? {
+    func renderTree(for instanceID: UUID) -> RenderNodeV2? {
         renderTreeByInstance[instanceID]
     }
 
@@ -423,78 +416,61 @@ final class WidgetRuntimeController {
 
         for instanceID in affectedInstances {
             mountedWidgets[instanceID]?.isDevelopment = isDevelopment
-            await renderInstance(instanceID)
+            await ensureMountedWorker(instanceID)
         }
     }
 
-    private func mountAndRender(_ instanceID: UUID) async {
-        do {
-            guard let _ = try await ensureMountedSession(instanceID) else { return }
-            await renderInstance(instanceID)
-        } catch {
-            errorByInstance[instanceID] = error.localizedDescription
-        }
+    private func ensureMountedWorker(_ instanceID: UUID) async {
+        guard mountedWidgets[instanceID] != nil else { return }
+        guard mountedWidgets[instanceID]?.sessionID == nil else { return }
+        guard !sessionManager.hasPendingMount(for: instanceID) else { return }
+
+        sessionManager.beginMount(instanceID: instanceID)
+        await mountInstance(instanceID)
     }
 
-    private func ensureMountedSession(_ instanceID: UUID) async throws -> RuntimeMountedWidget? {
-        guard var mounted = mountedWidgets[instanceID] else { return nil }
-
-        if mounted.sessionID != nil {
-            return mounted
-        }
-
+    private func mountInstance(_ instanceID: UUID) async {
+        guard let mounted = mountedWidgets[instanceID] else { return }
         guard await ensureBundleAvailable(mounted.definition) else {
             errorByInstance[instanceID] = "This widget is currently unavailable."
-            return nil
-        }
-
-        let response = try await sendRequest(
-            "mount",
-            params: RuntimeMountParams(
-                widgetId: mounted.definition.id,
-                instanceId: instanceID.uuidString,
-                bundlePath: mounted.definition.bundleFileURL.path,
-                forceReload: forceReloadWidgetIDs.contains(mounted.definition.id) ? true : nil
-            )
-        )
-        let result = try decode(response, as: RuntimeMountResult.self)
-        loadedWidgetIDs.insert(mounted.definition.id)
-        forceReloadWidgetIDs.remove(mounted.definition.id)
-        isAvailable = true
-
-        guard var latestMounted = mountedWidgets[instanceID] else { return nil }
-        latestMounted.sessionID = result.sessionId
-        latestMounted.isDevelopment = developmentWidgetIDs.contains(latestMounted.definition.id)
-        mountedWidgets[instanceID] = latestMounted
-        mounted = latestMounted
-        return mounted
-    }
-
-    private func renderInstance(_ instanceID: UUID) async {
-        let mounted: RuntimeMountedWidget
-        do {
-            guard let resolvedMounted = try await ensureMountedSession(instanceID) else { return }
-            mounted = resolvedMounted
-        } catch {
-            errorByInstance[instanceID] = error.localizedDescription
+            sessionManager.remove(instanceID: instanceID)
+            renderTreeByInstance.removeValue(forKey: instanceID)
             return
         }
 
-        await ensureLoaded(mounted.definition)
-
         do {
             let response = try await sendRequest(
-                "render",
-                params: RuntimeLegacyRenderParams(
-                    widgetID: mounted.definition.id,
-                    instanceID: instanceID.uuidString,
-                    environment: mounted.environment
+                "mount",
+                params: RuntimeMountParams(
+                    widgetId: mounted.definition.id,
+                    instanceId: instanceID.uuidString,
+                    bundlePath: mounted.definition.bundleFileURL.path,
+                    props: RuntimeMountProps(environment: mounted.environment),
+                    cachedStorage: [:]
                 )
             )
-            let result = try decode(response, as: RuntimeLegacyRenderResult.self)
-            renderTreeByInstance[instanceID] = result.tree.normalizedForRuntime()
+            let result = try decode(response, as: RuntimeMountResult.self)
+
+            guard mountedWidgets[instanceID] != nil else {
+                sessionManager.remove(instanceID: instanceID)
+                renderTreeByInstance.removeValue(forKey: instanceID)
+                _ = try? await sendRequest(
+                    "terminate",
+                    params: RuntimeTerminateParams(
+                        instanceId: instanceID.uuidString,
+                        sessionId: result.sessionId
+                    )
+                )
+                return
+            }
+
+            try sessionManager.activate(instanceID: instanceID, sessionId: result.sessionId)
+            mountedWidgets[instanceID]?.sessionID = result.sessionId
             errorByInstance.removeValue(forKey: instanceID)
+            isAvailable = true
         } catch {
+            sessionManager.remove(instanceID: instanceID)
+            renderTreeByInstance.removeValue(forKey: instanceID)
             errorByInstance[instanceID] = error.localizedDescription
         }
     }
@@ -512,27 +488,29 @@ final class WidgetRuntimeController {
         return true
     }
 
-    private func ensureLoaded(_ definition: WidgetDefinition) async {
-        guard await ensureBundleAvailable(definition) else {
-            return
-        }
+    private func restartInstance(_ instanceID: UUID) async {
+        guard mountedWidgets[instanceID] != nil else { return }
 
-        guard loadedWidgetIDs.contains(definition.id) == false else { return }
+        let sessionID = sessionManager.knownSessionID(for: instanceID)
+        sessionManager.remove(instanceID: instanceID)
+        mountedWidgets[instanceID]?.sessionID = nil
 
-        do {
-            _ = try await sendRequest(
-                "load",
-                params: RuntimeLegacyLoadParams(
-                    widgetID: definition.id,
-                    bundlePath: definition.bundleFileURL.path
+        if let sessionID {
+            do {
+                _ = try await sendRequest(
+                    "terminate",
+                    params: RuntimeTerminateParams(
+                        instanceId: instanceID.uuidString,
+                        sessionId: sessionID
+                    )
                 )
-            )
-            loadedWidgetIDs.insert(definition.id)
-            isAvailable = true
-        } catch {
-            isAvailable = false
-            log.write("Widget runtime: load failed for \(definition.id): \(error.localizedDescription)")
+            } catch {
+                log.write("Widget runtime: terminate failed during restart for \(instanceID.uuidString): \(error.localizedDescription)")
+            }
         }
+
+        sessionManager.beginMount(instanceID: instanceID)
+        await mountInstance(instanceID)
     }
 
     private func rebuild(_ definition: WidgetDefinition) async {
@@ -629,21 +607,58 @@ final class WidgetRuntimeController {
 
     private func handleProcessTermination(description: String) {
         log.write(description)
-        loadedWidgetIDs.removeAll()
         isAvailable = false
+        sessionManager.reset()
+        renderTreeByInstance.removeAll()
         for instanceID in mountedWidgets.keys {
             mountedWidgets[instanceID]?.sessionID = nil
         }
     }
 
     private func handle(_ notification: RuntimeTransportNotification) {
+        if notification.method == "render" {
+            guard let params = try? decode(notification.params, as: WidgetRenderNotificationParams.self),
+                  let instanceID = UUID(uuidString: params.instanceId),
+                  params.kind == "full" else {
+                return
+            }
+
+            guard sessionManager.acceptRender(
+                instanceID: instanceID,
+                sessionId: params.sessionId,
+                renderRevision: params.renderRevision
+            ) else {
+                return
+            }
+
+            renderTreeByInstance[instanceID] = params.data
+            errorByInstance.removeValue(forKey: instanceID)
+            return
+        }
+
+        if notification.method == "error" {
+            guard let params = try? decode(notification.params, as: WidgetErrorNotificationParams.self),
+                  let instanceID = UUID(uuidString: params.instanceId) else {
+                return
+            }
+
+            if let sessionID = sessionManager.knownSessionID(for: instanceID),
+               sessionID != params.sessionId {
+                return
+            }
+
+            renderTreeByInstance.removeValue(forKey: instanceID)
+            errorByInstance[instanceID] = params.error.message
+            return
+        }
+
         if notification.method == "log" {
             guard let params = try? decode(notification.params, as: RuntimeLogNotificationParams.self) else {
                 return
             }
             let level = params.level ?? "info"
-            let widgetID = params.widgetID ?? "unknown"
-            log.write("Widget \(widgetID) [\(level)]: \(params.message ?? "")")
+            let subject = params.widgetID ?? params.instanceId ?? "unknown"
+            log.write("Widget \(subject) [\(level)]: \(params.message ?? "")")
         }
     }
 
@@ -659,9 +674,6 @@ final class WidgetRuntimeController {
     }
 
     private func handleBuildSuccess(widgetID: String) async {
-        loadedWidgetIDs.remove(widgetID)
-        forceReloadWidgetIDs.insert(widgetID)
-
         let refreshedDefinitions = WidgetCatalog.discover(log: log)
         let matchingDefinition = refreshedDefinitions.first(where: { $0.id == widgetID })
 
@@ -676,7 +688,6 @@ final class WidgetRuntimeController {
             .map(\.instanceID)
 
         guard let matchingDefinition else {
-            forceReloadWidgetIDs.remove(widgetID)
             for instanceID in affectedInstances {
                 errorByInstance[instanceID] = "This widget is currently unavailable."
             }
@@ -684,7 +695,6 @@ final class WidgetRuntimeController {
         }
 
         guard FileManager.default.fileExists(atPath: matchingDefinition.bundleFileURL.path) else {
-            forceReloadWidgetIDs.remove(widgetID)
             for instanceID in affectedInstances {
                 errorByInstance[instanceID] = "This widget is currently unavailable."
             }
@@ -692,8 +702,7 @@ final class WidgetRuntimeController {
         }
 
         for instanceID in affectedInstances {
-            mountedWidgets[instanceID]?.sessionID = nil
-            await renderInstance(instanceID)
+            await restartInstance(instanceID)
         }
     }
 }
