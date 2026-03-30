@@ -45,6 +45,9 @@ struct NotchContentView: View {
             anchor: .top
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task(id: vm.viewManager.layoutSnapshot()) {
+            vm.syncWidgetRuntimeLayouts()
+        }
     }
 
     private var expandedContent: some View {
@@ -415,9 +418,13 @@ private struct WidgetCard: View {
                     Text(definition.title)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(definition.caption)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.42))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
 
                 Spacer(minLength: 0)
@@ -575,7 +582,13 @@ private struct RuntimeWidgetSurface: View {
             if let error = vm.widgetRuntime.error(for: widget.id) {
                 runtimeErrorSurface(message: error)
             } else if let tree = vm.widgetRuntime.renderTree(for: widget.id) {
-                RuntimeNodeView(node: tree, vm: vm, instanceID: widget.id, tint: tint)
+                RuntimeV2NodeView(
+                    node: tree,
+                    vm: vm,
+                    instanceID: widget.id,
+                    assetRootURL: definition.assetRootURL,
+                    path: []
+                )
             } else {
                 runtimeLoadingSurface
             }
@@ -598,9 +611,6 @@ private struct RuntimeWidgetSurface: View {
                     isEditing: vm.isEditingLayout
                 )
             }
-        }
-        .onDisappear {
-            vm.widgetRuntime.unmount(instanceID: widget.id)
         }
     }
 
@@ -654,6 +664,854 @@ private struct RuntimeWidgetSurface: View {
         #else
         "This widget is currently unavailable. It may have been removed, disabled, or failed to load."
         #endif
+    }
+}
+
+private struct RuntimeV2NodeView: View {
+    var node: RenderNodeV2
+    var vm: NotchViewModel
+    var instanceID: UUID
+    var assetRootURL: URL
+    var path: [Int]
+
+    var body: some View {
+        styled(baseView)
+    }
+
+    private var baseView: AnyView {
+        switch node.type {
+        case "Stack":
+            return AnyView(
+                VStack(
+                    alignment: RuntimeV2StyleResolver.horizontalAlignment(node.string("alignment")),
+                    spacing: CGFloat(node.number("spacing") ?? 8)
+                ) {
+                    childViews
+                }
+            )
+        case "Inline":
+            return AnyView(
+                HStack(
+                    alignment: RuntimeV2StyleResolver.verticalAlignment(node.string("alignment")),
+                    spacing: CGFloat(node.number("spacing") ?? 8)
+                ) {
+                    childViews
+                }
+            )
+        case "ScrollView":
+            return scrollView
+        case "Divider":
+            return AnyView(
+                Rectangle()
+                    .fill(RuntimeV2StyleResolver.color(hex: node.string("color")) ?? Color.white.opacity(0.08))
+                    .frame(height: 1)
+            )
+        case "Text", "__text":
+            return AnyView(
+                Text(node.string("text") ?? "")
+                    .font(
+                        .system(
+                            size: CGFloat(node.number("size") ?? 12),
+                            weight: RuntimeV2StyleResolver.fontWeight(node.string("weight"), default: .medium),
+                            design: RuntimeV2StyleResolver.fontDesign(node.string("design"))
+                        )
+                    )
+                    .foregroundStyle(textColor)
+                    .multilineTextAlignment(RuntimeV2StyleResolver.textAlignment(node.string("alignment")))
+                    .lineLimit(node.decoded("lineLimit", as: Int.self) ?? node.decoded("lineClamp", as: Int.self))
+                    .minimumScaleFactor(CGFloat(node.number("minimumScaleFactor") ?? 1))
+                    .strikethrough(node.bool("strikethrough") ?? false, color: .white.opacity(0.28))
+                    .frame(maxWidth: .infinity, alignment: RuntimeV2StyleResolver.textFrameAlignment(node.string("alignment")))
+            )
+        case "Icon":
+            return AnyView(
+                Image(systemName: node.string("symbol") ?? "questionmark")
+                    .font(
+                        .system(
+                            size: CGFloat(node.number("size") ?? 12),
+                            weight: RuntimeV2StyleResolver.fontWeight(node.string("weight"), default: .semibold)
+                        )
+                    )
+                    .foregroundStyle(iconColor)
+            )
+        case "Image":
+            return AnyView(
+                RuntimeV2ImageNodeView(
+                    node: node,
+                    assetRootURL: assetRootURL
+                )
+            )
+        case "Button":
+            return AnyView(
+                Button {
+                    guard let callbackID = node.string("onPress") else { return }
+                    vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                } label: {
+                    Text(node.string("title") ?? "Action")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.95))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(0.14))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(node.string("onPress") == nil)
+            )
+        case "Row":
+            return AnyView(
+                Button {
+                    guard let callbackID = node.string("onPress") else { return }
+                    vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                } label: {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.white.opacity(0.05))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .overlay {
+                            if node.children.count == 1 {
+                                RuntimeV2NodeView(
+                                    node: node.children[0],
+                                    vm: vm,
+                                    instanceID: instanceID,
+                                    assetRootURL: assetRootURL,
+                                    path: path + [0]
+                                )
+                                    .padding(.horizontal, 10)
+                            } else {
+                                HStack(spacing: 8) {
+                                    childViews
+                                }
+                                .padding(.horizontal, 10)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(node.string("onPress") == nil)
+            )
+        case "IconButton":
+            return AnyView(
+                Button {
+                    guard let callbackID = node.string("onPress"), !(node.bool("disabled") ?? false) else { return }
+                    vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                } label: {
+                    Image(systemName: node.string("symbol") ?? "questionmark")
+                        .font(
+                            .system(
+                                size: iconButtonMetrics.fontSize,
+                                weight: .semibold
+                            )
+                        )
+                        .foregroundStyle(iconColor)
+                        .frame(width: iconButtonMetrics.frameSize, height: iconButtonMetrics.frameSize)
+                }
+                .buttonStyle(.plain)
+                .disabled(node.bool("disabled") ?? false)
+            )
+        case "Checkbox":
+            return AnyView(
+                Button {
+                    guard let callbackID = node.string("onPress"), !(node.bool("disabled") ?? false) else { return }
+                    vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                } label: {
+                    Circle()
+                        .strokeBorder(.white.opacity((node.bool("checked") ?? false) ? 0.12 : 0.28), lineWidth: 1.2)
+                        .frame(width: 14, height: 14)
+                        .overlay {
+                            if node.bool("checked") ?? false {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.72))
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(node.bool("disabled") ?? false)
+            )
+        case "Input":
+            return AnyView(
+                RuntimeV2InputNodeView(
+                    node: node,
+                    vm: vm,
+                    instanceID: instanceID,
+                    assetRootURL: assetRootURL,
+                    path: path
+                )
+            )
+        case "Circle":
+            return circleView
+        case "RoundedRect":
+            return roundedRectView
+        case "Spacer":
+            return AnyView(Spacer(minLength: CGFloat(node.number("minLength") ?? 0)))
+        default:
+            return AnyView(EmptyView())
+        }
+    }
+
+    @ViewBuilder
+    private var childViews: some View {
+        ForEach(indexedChildren) { child in
+            RuntimeV2NodeView(
+                node: child.node,
+                vm: vm,
+                instanceID: instanceID,
+                assetRootURL: assetRootURL,
+                path: path + [child.index]
+            )
+        }
+    }
+
+    private var indexedChildren: [RuntimeV2IndexedChild] {
+        node.children.enumerated().map { index, child in
+            RuntimeV2IndexedChild(
+                id: child.id ?? child.key ?? "v2-index-\(index)",
+                index: index,
+                node: child
+            )
+        }
+    }
+
+    private var scrollView: AnyView {
+        let isHorizontal = node.string("direction") == "horizontal"
+        let spacing = CGFloat(node.number("spacing") ?? 8)
+        let showsIndicators = node.bool("showsIndicators") ?? false
+        let fadeEdges = node.string("fadeEdges") ?? "bottom"
+
+        if isHorizontal {
+            return AnyView(
+                ScrollView(.horizontal, showsIndicators: showsIndicators) {
+                    HStack(
+                        alignment: RuntimeV2StyleResolver.verticalAlignment(node.string("alignment")),
+                        spacing: spacing
+                    ) {
+                        childViews
+                    }
+                }
+            )
+        }
+
+        let view = AnyView(
+            ScrollView(.vertical, showsIndicators: showsIndicators) {
+                VStack(
+                    alignment: RuntimeV2StyleResolver.horizontalAlignment(node.string("alignment")),
+                    spacing: spacing
+                ) {
+                    childViews
+                }
+            }
+        )
+
+        guard fadeEdges != "none" else {
+            return view
+        }
+
+        return AnyView(view.mask(scrollFadeMask(for: fadeEdges)))
+    }
+
+    private var circleView: AnyView {
+        let size = CGFloat(node.number("size") ?? 24)
+        let width = CGFloat(node.number("width") ?? node.number("size") ?? 24)
+        let height = CGFloat(node.number("height") ?? node.number("size") ?? 24)
+        let fillColor = RuntimeV2StyleResolver.color(hex: node.string("fill")) ?? Color.clear
+        let strokeColor = RuntimeV2StyleResolver.color(hex: node.string("strokeColor"))
+        let strokeWidth = CGFloat(node.number("strokeWidth") ?? 0)
+
+        var view = AnyView(
+            Circle()
+                .fill(fillColor)
+                .frame(
+                    width: node.number("size") != nil ? size : width,
+                    height: node.number("size") != nil ? size : height
+                )
+        )
+
+        if let strokeColor, strokeWidth > 0 {
+            view = AnyView(
+                view.overlay {
+                    Circle()
+                        .strokeBorder(strokeColor, lineWidth: strokeWidth)
+                }
+            )
+        }
+
+        if !node.children.isEmpty {
+            view = AnyView(
+                view.overlay {
+                    ZStack {
+                        childViews
+                    }
+                }
+            )
+        }
+
+        return view
+    }
+
+    private var roundedRectView: AnyView {
+        let width = node.number("width").map { CGFloat($0) }
+        let height = node.number("height").map { CGFloat($0) }
+        let cornerRadius = CGFloat(node.number("cornerRadius") ?? 12)
+        let fillColor = RuntimeV2StyleResolver.color(hex: node.string("fill")) ?? Color.clear
+        let strokeColor = RuntimeV2StyleResolver.color(hex: node.string("strokeColor"))
+        let strokeWidth = CGFloat(node.number("strokeWidth") ?? 0)
+
+        var view = AnyView(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(fillColor)
+                .frame(width: width, height: height)
+        )
+
+        if let strokeColor, strokeWidth > 0 {
+            view = AnyView(
+                view.overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(strokeColor, lineWidth: strokeWidth)
+                }
+            )
+        }
+
+        if !node.children.isEmpty {
+            view = AnyView(
+                view.overlay {
+                    ZStack {
+                        childViews
+                    }
+                }
+            )
+        }
+
+        return view
+    }
+
+    private func styled(_ content: AnyView) -> AnyView {
+        var view = content
+
+        if let padding = RuntimeV2StyleResolver.padding(from: node.value("padding")) {
+            view = AnyView(view.padding(padding.edgeInsets))
+        }
+
+        if let frame = RuntimeV2StyleResolver.frame(from: node.value("frame")) {
+            view = applyFrame(frame, to: view)
+        }
+
+        if node.type == "Image" {
+            view = AnyView(view.clipped())
+        }
+
+        if let backgroundColor = RuntimeV2StyleResolver.color(hex: node.string("background")) {
+            view = AnyView(view.background(backgroundColor))
+        }
+
+        if let clipShape = RuntimeV2StyleResolver.clipShape(from: node.value("clipShape")) {
+            view = clipped(view, using: clipShape)
+        }
+
+        if let opacity = node.number("opacity") {
+            view = AnyView(view.opacity(opacity))
+        }
+
+        if let overlays = node.decoded("overlay", as: [RuntimeV2OverlayPayload].self), !overlays.isEmpty {
+            for overlay in overlays {
+                view = AnyView(
+                    view.overlay(alignment: RuntimeV2StyleResolver.alignment(overlay.alignment)) {
+                        RuntimeV2NodeView(
+                            node: overlay.node,
+                            vm: vm,
+                            instanceID: instanceID,
+                            assetRootURL: assetRootURL,
+                            path: path
+                        )
+                    }
+                )
+            }
+        }
+
+        if !isControlNode, let callbackID = node.string("onPress") {
+            view = pressable(view, callbackID: callbackID)
+        }
+
+        return view
+    }
+
+    private func applyFrame(_ frame: RuntimeV2FramePayload, to content: AnyView) -> AnyView {
+        let alignment = RuntimeV2StyleResolver.alignment(frame.alignment)
+        let width = frame.width.map { CGFloat($0) }
+        let height = frame.height.map { CGFloat($0) }
+        let maxWidth = frame.maxWidth?.cgFloatValue
+        let maxHeight = frame.maxHeight?.cgFloatValue
+
+        let fixed = AnyView(
+            content.frame(
+                width: width,
+                height: height,
+                alignment: alignment
+            )
+        )
+
+        return AnyView(
+            fixed.frame(
+                maxWidth: maxWidth,
+                maxHeight: maxHeight,
+                alignment: alignment
+            )
+        )
+    }
+
+    private func pressable(_ content: AnyView, callbackID: String) -> AnyView {
+        if let clipShape = RuntimeV2StyleResolver.clipShape(from: node.value("clipShape")) {
+            switch clipShape.type {
+            case "circle":
+                return AnyView(
+                    content
+                        .contentShape(Circle())
+                        .onTapGesture {
+                            vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                        }
+                )
+            case "roundedRect":
+                return AnyView(
+                    content
+                        .contentShape(
+                            RoundedRectangle(
+                                cornerRadius: CGFloat(clipShape.cornerRadius ?? 12),
+                                style: .continuous
+                            )
+                        )
+                        .onTapGesture {
+                            vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                        }
+                )
+            default:
+                break
+            }
+        }
+
+        if node.type == "Circle" {
+            return AnyView(
+                content
+                    .contentShape(Circle())
+                    .onTapGesture {
+                        vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                    }
+            )
+        }
+
+        if node.type == "RoundedRect" {
+            return AnyView(
+                content
+                    .contentShape(
+                        RoundedRectangle(
+                            cornerRadius: CGFloat(node.number("cornerRadius") ?? 12),
+                            style: .continuous
+                        )
+                    )
+                    .onTapGesture {
+                        vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                    }
+            )
+        }
+
+        return AnyView(
+            content
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    vm.widgetRuntime.triggerCallback(callbackID: callbackID, for: instanceID)
+                }
+        )
+    }
+
+    private func clipped(_ content: AnyView, using clipShape: RuntimeV2ClipShapePayload) -> AnyView {
+        switch clipShape.type {
+        case "circle":
+            return AnyView(content.clipShape(Circle()))
+        case "roundedRect":
+            return AnyView(
+                content.clipShape(
+                    RoundedRectangle(
+                        cornerRadius: CGFloat(clipShape.cornerRadius ?? 12),
+                        style: .continuous
+                    )
+                )
+            )
+        default:
+            return content
+        }
+    }
+
+    private var textColor: Color {
+        if let explicit = RuntimeV2StyleResolver.color(hex: node.string("color")) {
+            return explicit
+        }
+
+        switch node.string("tone") {
+        case "primary":
+            return .white.opacity(0.84)
+        case "tertiary":
+            return .white.opacity(0.42)
+        case "secondary":
+            return .white.opacity(0.58)
+        default:
+            return .white.opacity(0.72)
+        }
+    }
+
+    private var iconColor: Color {
+        if let explicit = RuntimeV2StyleResolver.color(hex: node.string("color")) {
+            return explicit
+        }
+
+        switch node.string("tone") {
+        case "primary":
+            return .white.opacity(0.84)
+        case "tertiary":
+            return .white.opacity(0.26)
+        default:
+            return .white.opacity(0.42)
+        }
+    }
+
+    private var iconButtonMetrics: (fontSize: CGFloat, frameSize: CGFloat) {
+        switch node.string("size") {
+        case "large":
+            return (12, 20)
+        default:
+            return (10, 16)
+        }
+    }
+
+    private var isControlNode: Bool {
+        switch node.type {
+        case "Button", "Row", "Checkbox", "IconButton", "Input":
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private func scrollFadeMask(for fadeEdges: String) -> some View {
+        switch fadeEdges {
+        case "top":
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: 0.18),
+                    .init(color: .black, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        case "both":
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: 0.18),
+                    .init(color: .black, location: 0.82),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        default:
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.82),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+}
+
+private struct RuntimeV2IndexedChild: Identifiable {
+    var id: String
+    var index: Int
+    var node: RenderNodeV2
+}
+
+private struct RuntimeV2ImageSizePreferenceKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
+    }
+}
+
+@MainActor
+private final class RuntimeV2ImageLoader: ObservableObject {
+    @Published private(set) var image: NSImage?
+
+    func load(
+        sourceURL: URL?,
+        targetSize: CGSize?,
+        contentMode: String?,
+        scale: CGFloat
+    ) async {
+        guard let sourceURL,
+              let targetSize,
+              targetSize.width > 0,
+              targetSize.height > 0 else {
+            image = nil
+            return
+        }
+
+        if let cached = WidgetImagePipeline.cachedImage(
+            at: sourceURL,
+            targetSize: targetSize,
+            scale: scale,
+            contentMode: contentMode
+        ) {
+            image = cached
+            return
+        }
+
+        image = nil
+
+        let nextImage = await WidgetImagePipeline.image(
+            at: sourceURL,
+            targetSize: targetSize,
+            scale: scale,
+            contentMode: contentMode
+        )
+
+        guard !Task.isCancelled else { return }
+        image = nextImage
+    }
+}
+
+private struct RuntimeV2ImageNodeView: View {
+    var node: RenderNodeV2
+    var assetRootURL: URL
+
+    @Environment(\.displayScale) private var displayScale
+    @StateObject private var loader = RuntimeV2ImageLoader()
+    @State private var measuredSize: CGSize = .zero
+
+    private var screenScale: CGFloat {
+        max(displayScale, 1)
+    }
+
+    private var resolvedAssetURL: URL? {
+        guard let resolved = WidgetAssetResolver.assetURL(for: node.string("src"), under: assetRootURL),
+              FileManager.default.fileExists(atPath: resolved.path) else {
+            return nil
+        }
+
+        return resolved
+    }
+
+    private var explicitFrameSize: CGSize? {
+        guard let frame = RuntimeV2StyleResolver.frame(from: node.value("frame")) else {
+            return nil
+        }
+
+        let width = max(0, CGFloat(frame.width ?? 0))
+        let height = max(0, CGFloat(frame.height ?? 0))
+        guard width > 0 || height > 0 else {
+            return nil
+        }
+
+        return CGSize(width: width, height: height)
+    }
+
+    private var intrinsicImageSize: CGSize? {
+        guard let resolvedAssetURL else { return nil }
+        return WidgetImagePipeline.intrinsicSize(at: resolvedAssetURL)
+    }
+
+    private var resolvedLayoutSize: CGSize? {
+        RuntimeV2ImageLayoutResolver.layoutSize(
+            explicitFrameSize: explicitFrameSize,
+            measuredSize: measuredSize,
+            intrinsicSize: intrinsicImageSize
+        )
+    }
+
+    private var targetSize: CGSize? {
+        RuntimeV2ImageLayoutResolver.requestSize(
+            explicitFrameSize: explicitFrameSize,
+            measuredSize: measuredSize,
+            intrinsicSize: intrinsicImageSize
+        )
+    }
+
+    private var idealWidth: CGFloat? {
+        let explicitWidth = explicitFrameSize?.width ?? 0
+        guard explicitWidth <= 0 else { return nil }
+        return resolvedLayoutSize?.width
+    }
+
+    private var idealHeight: CGFloat? {
+        let explicitHeight = explicitFrameSize?.height ?? 0
+        guard explicitHeight <= 0 else { return nil }
+        return resolvedLayoutSize?.height
+    }
+
+    private var aspectRatio: CGFloat? {
+        if let intrinsicImageSize,
+           intrinsicImageSize.width > 0,
+           intrinsicImageSize.height > 0 {
+            return intrinsicImageSize.width / intrinsicImageSize.height
+        }
+
+        if let imageSize = loader.image?.size,
+           imageSize.width > 0,
+           imageSize.height > 0 {
+            return imageSize.width / imageSize.height
+        }
+
+        return nil
+    }
+
+    private var loadKey: String {
+        let width = Int((targetSize?.width ?? 0).rounded(.up))
+        let height = Int((targetSize?.height ?? 0).rounded(.up))
+        let scale = Int((screenScale * 100).rounded())
+        return "\(resolvedAssetURL?.path ?? "missing")#\(width)x\(height)#\(scale)#\(node.string("contentMode") ?? "fill")"
+    }
+
+    var body: some View {
+        Group {
+            if let image = loader.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(
+                        aspectRatio,
+                        contentMode: RuntimeV2StyleResolver.imageContentMode(node.string("contentMode"))
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white.opacity(0.06))
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.32))
+                    }
+                    .aspectRatio(
+                        aspectRatio,
+                        contentMode: RuntimeV2StyleResolver.imageContentMode(node.string("contentMode"))
+                    )
+            }
+        }
+        .frame(idealWidth: idealWidth, idealHeight: idealHeight)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: RuntimeV2ImageSizePreferenceKey.self,
+                    value: proxy.size
+                )
+            }
+        )
+        .onPreferenceChange(RuntimeV2ImageSizePreferenceKey.self) { size in
+            let width = max(0, CGFloat(Int(size.width.rounded(.up))))
+            let height = max(0, CGFloat(Int(size.height.rounded(.up))))
+            measuredSize = CGSize(width: width, height: height)
+        }
+        .task(id: loadKey) {
+            await loader.load(
+                sourceURL: resolvedAssetURL,
+                targetSize: targetSize,
+                contentMode: node.string("contentMode"),
+                scale: screenScale
+            )
+        }
+    }
+}
+
+private struct RuntimeV2InputNodeView: View {
+    var node: RenderNodeV2
+    var vm: NotchViewModel
+    var instanceID: UUID
+    var assetRootURL: URL
+    var path: [Int]
+
+    @State private var text = ""
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let leadingAccessory = node.decoded("leadingAccessory", as: RenderNodeV2.self) {
+                RuntimeV2NodeView(
+                    node: leadingAccessory,
+                    vm: vm,
+                    instanceID: instanceID,
+                    assetRootURL: assetRootURL,
+                    path: path
+                )
+            }
+
+            RuntimeInputTextField(
+                text: $text,
+                placeholder: node.string("placeholder") ?? "",
+                onCommit: {
+                    guard let callbackID = node.string("onSubmit") else { return }
+                    vm.widgetRuntime.triggerCallback(
+                        callbackID: callbackID,
+                        for: instanceID,
+                        payload: .object([
+                            "value": .string(text)
+                        ])
+                    )
+                }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            if let trailingAccessory = node.decoded("trailingAccessory", as: RenderNodeV2.self) {
+                Circle()
+                    .fill(.white.opacity(0.08))
+                    .frame(width: 24, height: 24)
+                    .overlay {
+                        RuntimeV2NodeView(
+                            node: trailingAccessory,
+                            vm: vm,
+                            instanceID: instanceID,
+                            assetRootURL: assetRootURL,
+                            path: path
+                        )
+                    }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.white.opacity(0.07))
+        )
+        .onAppear {
+            text = node.string("value") ?? ""
+        }
+        .onChange(of: node.string("value") ?? "") { _, newValue in
+            if newValue != text {
+                text = newValue
+            }
+        }
+        .onChange(of: text) { oldValue, newValue in
+            guard oldValue != newValue,
+                  newValue != (node.string("value") ?? ""),
+                  let callbackID = node.string("onChange") else { return }
+
+            vm.widgetRuntime.triggerCallback(
+                callbackID: callbackID,
+                for: instanceID,
+                payload: .object([
+                    "value": .string(newValue)
+                ])
+            )
+        }
     }
 }
 

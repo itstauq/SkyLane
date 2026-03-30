@@ -68,6 +68,14 @@ struct WidgetDefinition: Identifiable, Codable, Equatable {
             .appendingPathComponent("index.cjs")
     }
 
+    var assetRootURL: URL {
+        WidgetAssetResolver.assetRootURL(forPackageDirectoryURL: packageDirectoryURL)
+    }
+
+    func assetURL(for source: String?) -> URL? {
+        WidgetAssetResolver.assetURL(for: source, under: assetRootURL)
+    }
+
     var tint: Color {
         let palette: [Color] = [
             Color(red: 0.46, green: 0.68, blue: 0.98),

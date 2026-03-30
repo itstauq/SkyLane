@@ -1,26 +1,15 @@
-import { Button, Stack, Text } from "@notchapp/api";
+import { Button, Stack, Text, useLocalStorage } from "@notchapp/api";
 
-export const initialState = {
-  count: 0,
-};
+export default function Widget({ environment, logger }) {
+  const [count, setCount] = useLocalStorage("count", 0);
 
-export const actions = {
-  increment(state) {
-    return {
-      ...state,
-      count: (state?.count ?? 0) + 1,
-    };
-  },
-};
-
-export default function Widget({ environment, state, logger }) {
-  logger.info(`render hello widget span=${environment.span} count=${state.count}`);
+  logger.info(`render hello widget span=${environment.span} count=${count}`);
 
   return (
     <Stack spacing={10}>
       <Text>Hello from NotchApp</Text>
-      <Text tone="secondary">{`Span ${environment.span} • Count ${state.count}`}</Text>
-      <Button title="Increment" action="increment" />
+      <Text tone="secondary">{`Span ${environment.span} • Count ${count}`}</Text>
+      <Button title="Increment" onPress={() => setCount((value) => value + 1)} />
     </Stack>
   );
 }

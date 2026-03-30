@@ -11,5 +11,11 @@ xcodebuild \
   build 2>&1 | grep -E "(error:|warning:|BUILD)" | tail -10
 
 pkill -x NotchApp 2>/dev/null || true
+
+for _ in {1..100}; do
+    pgrep -x NotchApp >/dev/null || break
+    sleep 0.1
+done
+
 open "$APP_PATH"
 echo "Running. Logs: tail -f notchapp.log"

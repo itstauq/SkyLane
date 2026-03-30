@@ -1,139 +1,160 @@
-function flattenChildren(input) {
-  if (input == null || input === false) return [];
-  if (Array.isArray(input)) return input.flatMap(flattenChildren);
-  return [input];
+const React = require("react");
+const { useLocalStorage } = require("./hooks/useLocalStorage");
+const { usePromise } = require("./hooks/usePromise");
+const { useFetch } = require("./hooks/useFetch");
+const { openURL } = require("./functions/openURL");
+const { LocalStorage } = require("./runtime");
+
+const OVERLAY_SLOT_TYPE = "__notch_overlay";
+const LEADING_ACCESSORY_SLOT_TYPE = "__notch_leadingAccessory";
+const TRAILING_ACCESSORY_SLOT_TYPE = "__notch_trailingAccessory";
+
+function slot(type, props, children, key) {
+  return React.createElement(
+    type,
+    key == null ? props : { ...(props ?? {}), key },
+    children
+  );
 }
 
-function extractText(input) {
-  return flattenChildren(input)
-    .map((item) => {
-      if (typeof item === "string" || typeof item === "number") return String(item);
-      if (item && typeof item.text === "string") return item.text;
-      return "";
-    })
-    .join("");
+function normalizeOverlayChildren(overlay) {
+  if (overlay == null || overlay === false) {
+    return [];
+  }
+
+  if (Array.isArray(overlay)) {
+    return overlay.flatMap(normalizeOverlayChildren);
+  }
+
+  if (React.isValidElement(overlay)) {
+    return [slot(OVERLAY_SLOT_TYPE, { alignment: "center" }, overlay, overlay.key)];
+  }
+
+  if (typeof overlay === "object") {
+    const node = overlay.element ?? overlay.node;
+    if (node != null) {
+      return [
+        slot(
+          OVERLAY_SLOT_TYPE,
+          { alignment: typeof overlay.alignment === "string" ? overlay.alignment : "center" },
+          node,
+          overlay.key ?? node.key
+        ),
+      ];
+    }
+  }
+
+  return [];
 }
 
-function wrapNode(input) {
-  if (input == null || input === false) return null;
-  const flattened = flattenChildren(input);
-  if (flattened.length === 0) return null;
-  return { node: flattened[0] };
+function normalizeAccessoryChild(type, accessory) {
+  if (accessory == null || accessory === false) {
+    return [];
+  }
+
+  return [slot(type, null, accessory)];
+}
+
+function createHostElement(type, rawProps = {}) {
+  const {
+    children,
+    overlay,
+    leadingAccessory,
+    trailingAccessory,
+    ...props
+  } = rawProps;
+  const hostChildren = [];
+
+  if (children !== undefined) {
+    hostChildren.push(children);
+  }
+
+  hostChildren.push(...normalizeOverlayChildren(overlay));
+  hostChildren.push(...normalizeAccessoryChild(LEADING_ACCESSORY_SLOT_TYPE, leadingAccessory));
+  hostChildren.push(...normalizeAccessoryChild(TRAILING_ACCESSORY_SLOT_TYPE, trailingAccessory));
+
+  return React.createElement(type, props, ...hostChildren);
 }
 
 function Stack(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Stack",
-    direction: props.direction ?? "vertical",
-    spacing: props.spacing ?? 8,
-    children: flattenChildren(props.children),
-  };
+  return createHostElement("Stack", props);
 }
 
 function Inline(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Inline",
-    spacing: props.spacing ?? 8,
-    children: flattenChildren(props.children),
-  };
+  return createHostElement("Inline", props);
 }
 
-function Row(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Row",
-    action: props.action ?? null,
-    payload: props.payload ?? null,
-    children: flattenChildren(props.children),
-  };
+function Spacer(props = {}) {
+  return createHostElement("Spacer", props);
 }
 
 function Text(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Text",
-    text: props.text ?? extractText(props.children),
-    role: props.role ?? undefined,
-    tone: props.tone ?? undefined,
-    lineClamp: props.lineClamp ?? undefined,
-    strikethrough: props.strikethrough ?? undefined,
-    children: [],
-  };
+  return createHostElement("Text", props);
 }
 
 function Icon(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Icon",
-    symbol: props.symbol ?? props.icon ?? props.name ?? undefined,
-    tone: props.tone ?? undefined,
-    children: [],
-  };
+  return createHostElement("Icon", props);
 }
 
-function IconButton(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "IconButton",
-    symbol: props.symbol ?? props.icon ?? props.name ?? undefined,
-    action: props.action ?? null,
-    payload: props.payload ?? null,
-    tone: props.tone ?? undefined,
-    disabled: props.disabled ?? false,
-    children: [],
-  };
-}
-
-function Checkbox(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Checkbox",
-    checked: props.checked ?? false,
-    action: props.action ?? null,
-    payload: props.payload ?? null,
-    children: [],
-  };
-}
-
-function Input(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Input",
-    value: props.value ?? "",
-    placeholder: props.placeholder ?? "",
-    changeAction: props.changeAction ?? null,
-    submitAction: props.submitAction ?? null,
-    leadingAccessory: wrapNode(props.leadingAccessory),
-    trailingAccessory: wrapNode(props.trailingAccessory),
-    children: [],
-  };
+function Image(props = {}) {
+  return createHostElement("Image", props);
 }
 
 function Button(props = {}) {
-  return {
-    id: props.id ?? undefined,
-    type: "Button",
-    title: props.title ?? extractText(props.children),
-    action: props.action ?? null,
-    payload: props.payload ?? null,
-    children: [],
-  };
+  return createHostElement("Button", props);
+}
+
+function Row(props = {}) {
+  return createHostElement("Row", props);
+}
+
+function IconButton(props = {}) {
+  return createHostElement("IconButton", props);
+}
+
+function Checkbox(props = {}) {
+  return createHostElement("Checkbox", props);
+}
+
+function Input(props = {}) {
+  return createHostElement("Input", props);
+}
+
+function ScrollView(props = {}) {
+  return createHostElement("ScrollView", props);
+}
+
+function Divider(props = {}) {
+  return createHostElement("Divider", props);
+}
+
+function Circle(props = {}) {
+  return createHostElement("Circle", props);
+}
+
+function RoundedRect(props = {}) {
+  return createHostElement("RoundedRect", props);
 }
 
 module.exports = {
   Stack,
   Inline,
-  Row,
+  Spacer,
   Text,
   Icon,
+  Image,
+  Button,
+  Row,
   IconButton,
   Checkbox,
   Input,
-  Button,
-  __internal: {
-    flattenChildren,
-    extractText,
-  },
+  ScrollView,
+  Divider,
+  Circle,
+  RoundedRect,
+  LocalStorage,
+  useLocalStorage,
+  usePromise,
+  useFetch,
+  openURL,
 };

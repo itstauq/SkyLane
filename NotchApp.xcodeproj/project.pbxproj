@@ -12,9 +12,35 @@
 		A10000030000000000000003 /* NotchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000030000000000000003; };
 		A10000040000000000000004 /* NotchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000040000000000000004; };
 		A10000050000000000000005 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000050000000000000005; };
-			A10000080000000000000008 /* SavedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000090000000000000009; };
-			A10000090000000000000009 /* ViewSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000100000000000000010; };
+		A10000110000000000000011 /* RuntimeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000110000000000000011; };
+		A10000120000000000000012 /* WidgetSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000120000000000000012; };
+		A10000080000000000000008 /* SavedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000090000000000000009; };
+		A10000090000000000000009 /* ViewSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000100000000000000010; };
 		A10000060000000000000006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000060000000000000006; };
+		A10000130000000000000013 /* RuntimeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000110000000000000011; };
+		A10000140000000000000014 /* WidgetSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000120000000000000012; };
+		A10000150000000000000015 /* WidgetSessionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000130000000000000013; };
+		A10000160000000000000016 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000140000000000000014; };
+			A10000170000000000000017 /* WidgetStorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000150000000000000015; };
+			A10000180000000000000018 /* WidgetStorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000150000000000000015; };
+			A10000190000000000000019 /* WidgetStorageManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000160000000000000016; };
+			A10000200000000000000020 /* WidgetStorageKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000170000000000000017; };
+			A10000210000000000000021 /* WidgetStorageKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000170000000000000017; };
+			A10000220000000000000022 /* WidgetStorageEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000180000000000000018; };
+			A10000230000000000000023 /* WidgetStorageEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000180000000000000018; };
+			A10000260000000000000026 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000190000000000000019; };
+			A10000270000000000000027 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000190000000000000019; };
+		A10000280000000000000028 /* WidgetHostAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000200000000000000020; };
+		A10000300000000000000030 /* WidgetHostAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000200000000000000020; };
+		A10000290000000000000029 /* WidgetHostAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000210000000000000021; };
+		A10000310000000000000031 /* WidgetAssetResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000220000000000000022; };
+		A10000320000000000000032 /* WidgetAssetResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000220000000000000022; };
+		A10000330000000000000033 /* WidgetImagePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000230000000000000023; };
+		A10000340000000000000034 /* WidgetImagePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000230000000000000023; };
+		A10000240000000000000024 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = C10000020000000000000002 /* SQLCipher */; };
+		A10000250000000000000025 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = C10000030000000000000003 /* SQLCipher */; };
+		A10000350000000000000035 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = C10000050000000000000005 /* Nuke */; };
+		A10000360000000000000036 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = C10000060000000000000006 /* Nuke */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,21 +49,47 @@
 		A20000030000000000000003 /* NotchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchViewModel.swift; sourceTree = "<group>"; };
 		A20000040000000000000004 /* NotchContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchContentView.swift; sourceTree = "<group>"; };
 		A20000050000000000000005 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
-			A20000090000000000000009 /* SavedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedViews.swift; sourceTree = "<group>"; };
-			A20000100000000000000010 /* ViewSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewSwitcher.swift; sourceTree = "<group>"; };
+		A20000110000000000000011 /* RuntimeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeTransport.swift; sourceTree = "<group>"; };
+		A20000120000000000000012 /* WidgetSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSessionManager.swift; sourceTree = "<group>"; };
+		A20000130000000000000013 /* WidgetSessionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSessionManagerTests.swift; sourceTree = "<group>"; };
+		A20000140000000000000014 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+			A20000150000000000000015 /* WidgetStorageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStorageManager.swift; sourceTree = "<group>"; };
+			A20000160000000000000016 /* WidgetStorageManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStorageManagerTests.swift; sourceTree = "<group>"; };
+			A20000170000000000000017 /* WidgetStorageKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStorageKeychain.swift; sourceTree = "<group>"; };
+			A20000180000000000000018 /* WidgetStorageEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStorageEngine.swift; sourceTree = "<group>"; };
+			A20000190000000000000019 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+			A20000200000000000000020 /* WidgetHostAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetHostAPI.swift; sourceTree = "<group>"; };
+		A20000210000000000000021 /* WidgetHostAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetHostAPITests.swift; sourceTree = "<group>"; };
+		A20000220000000000000022 /* WidgetAssetResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAssetResolver.swift; sourceTree = "<group>"; };
+		A20000230000000000000023 /* WidgetImagePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetImagePipeline.swift; sourceTree = "<group>"; };
+		A20000090000000000000009 /* SavedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedViews.swift; sourceTree = "<group>"; };
+		A20000100000000000000010 /* ViewSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewSwitcher.swift; sourceTree = "<group>"; };
 		A20000060000000000000006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20000080000000000000008 /* NotchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotchApp.entitlements; sourceTree = "<group>"; };
 		A30000010000000000000001 /* NotchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000020000000000000002 /* NotchAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NotchAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A40000010000000000000001 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+			A40000010000000000000001 /* Frameworks */ = {
+				isa = PBXFrameworksBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					A10000240000000000000024 /* SQLCipher in Frameworks */,
+					A10000350000000000000035 /* Nuke in Frameworks */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+			A40000020000000000000002 /* Frameworks */ = {
+				isa = PBXFrameworksBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					A10000160000000000000016 /* XCTest.framework in Frameworks */,
+					A10000250000000000000025 /* SQLCipher in Frameworks */,
+					A10000360000000000000036 /* Nuke in Frameworks */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -45,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				A50000020000000000000002 /* NotchApp */,
+				A50000040000000000000004 /* NotchAppTests */,
 				A50000030000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -57,11 +110,20 @@
 				A20000030000000000000003 /* NotchViewModel.swift */,
 				A20000040000000000000004 /* NotchContentView.swift */,
 				A20000050000000000000005 /* NotchShape.swift */,
+				A20000110000000000000011 /* RuntimeTransport.swift */,
+					A20000120000000000000012 /* WidgetSessionManager.swift */,
+					A20000150000000000000015 /* WidgetStorageManager.swift */,
+					A20000170000000000000017 /* WidgetStorageKeychain.swift */,
+					A20000180000000000000018 /* WidgetStorageEngine.swift */,
+					A20000190000000000000019 /* Preferences.swift */,
+					A20000200000000000000020 /* WidgetHostAPI.swift */,
+					A20000220000000000000022 /* WidgetAssetResolver.swift */,
+					A20000230000000000000023 /* WidgetImagePipeline.swift */,
 					A20000090000000000000009 /* SavedViews.swift */,
 					A20000100000000000000010 /* ViewSwitcher.swift */,
-				A20000060000000000000006 /* Assets.xcassets */,
-				A20000080000000000000008 /* NotchApp.entitlements */,
-			);
+					A20000060000000000000006 /* Assets.xcassets */,
+					A20000080000000000000008 /* NotchApp.entitlements */,
+				);
 			path = NotchApp;
 			sourceTree = "<group>";
 		};
@@ -69,8 +131,19 @@
 			isa = PBXGroup;
 			children = (
 				A30000010000000000000001 /* NotchApp.app */,
+				A30000020000000000000002 /* NotchAppTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A50000040000000000000004 /* NotchAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				A20000130000000000000013 /* WidgetSessionManagerTests.swift */,
+				A20000160000000000000016 /* WidgetStorageManagerTests.swift */,
+				A20000210000000000000021 /* WidgetHostAPITests.swift */,
+			);
+			path = NotchAppTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -87,12 +160,36 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
+				dependencies = (
+				);
+				name = NotchApp;
+				packageProductDependencies = (
+					C10000020000000000000002 /* SQLCipher */,
+					C10000050000000000000005 /* Nuke */,
+				);
+				productName = NotchApp;
+				productReference = A30000010000000000000001 /* NotchApp.app */;
+				productType = "com.apple.product-type.application";
+		};
+		A60000020000000000000002 /* NotchAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000030000000000000003 /* Build configuration list for PBXNativeTarget "NotchAppTests" */;
+			buildPhases = (
+				A70000040000000000000004 /* Sources */,
+				A40000020000000000000002 /* Frameworks */,
 			);
-			name = NotchApp;
-			productName = NotchApp;
-			productReference = A30000010000000000000001 /* NotchApp.app */;
-			productType = "com.apple.product-type.application";
+			buildRules = (
+			);
+				dependencies = (
+				);
+				name = NotchAppTests;
+				packageProductDependencies = (
+					C10000030000000000000003 /* SQLCipher */,
+					C10000060000000000000006 /* Nuke */,
+				);
+				productName = NotchAppTests;
+				productReference = A30000020000000000000002 /* NotchAppTests.xctest */;
+				productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -107,6 +204,9 @@
 					A60000010000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
+					A60000020000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+					};
 				};
 			};
 			buildConfigurationList = A80000020000000000000002 /* Build configuration list for PBXProject "NotchApp" */;
@@ -118,11 +218,16 @@
 				Base,
 			);
 			mainGroup = A50000010000000000000001;
-			productRefGroup = A50000030000000000000003 /* Products */;
-			projectDirPath = "";
-			projectRoot = "";
-			targets = (
-				A60000010000000000000001 /* NotchApp */,
+				productRefGroup = A50000030000000000000003 /* Products */;
+				projectDirPath = "";
+				projectRoot = "";
+				packageReferences = (
+					C10000010000000000000001 /* XCRemoteSwiftPackageReference "swift-sqlcipher" */,
+					C10000040000000000000004 /* XCRemoteSwiftPackageReference "Nuke" */,
+				);
+				targets = (
+					A60000010000000000000001 /* NotchApp */,
+					A60000020000000000000002 /* NotchAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -169,12 +274,82 @@
 				A10000030000000000000003 /* NotchViewModel.swift in Sources */,
 				A10000040000000000000004 /* NotchContentView.swift in Sources */,
 				A10000050000000000000005 /* NotchShape.swift in Sources */,
+				A10000110000000000000011 /* RuntimeTransport.swift in Sources */,
+					A10000120000000000000012 /* WidgetSessionManager.swift in Sources */,
+					A10000170000000000000017 /* WidgetStorageManager.swift in Sources */,
+					A10000200000000000000020 /* WidgetStorageKeychain.swift in Sources */,
+					A10000220000000000000022 /* WidgetStorageEngine.swift in Sources */,
+					A10000260000000000000026 /* Preferences.swift in Sources */,
+					A10000280000000000000028 /* WidgetHostAPI.swift in Sources */,
+					A10000310000000000000031 /* WidgetAssetResolver.swift in Sources */,
+					A10000330000000000000033 /* WidgetImagePipeline.swift in Sources */,
 					A10000080000000000000008 /* SavedViews.swift in Sources */,
 					A10000090000000000000009 /* ViewSwitcher.swift in Sources */,
-			);
+				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A70000040000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000130000000000000013 /* RuntimeTransport.swift in Sources */,
+					A10000140000000000000014 /* WidgetSessionManager.swift in Sources */,
+					A10000150000000000000015 /* WidgetSessionManagerTests.swift in Sources */,
+					A10000180000000000000018 /* WidgetStorageManager.swift in Sources */,
+					A10000190000000000000019 /* WidgetStorageManagerTests.swift in Sources */,
+					A10000210000000000000021 /* WidgetStorageKeychain.swift in Sources */,
+					A10000230000000000000023 /* WidgetStorageEngine.swift in Sources */,
+					A10000270000000000000027 /* Preferences.swift in Sources */,
+					A10000300000000000000030 /* WidgetHostAPI.swift in Sources */,
+					A10000320000000000000032 /* WidgetAssetResolver.swift in Sources */,
+					A10000340000000000000034 /* WidgetImagePipeline.swift in Sources */,
+					A10000290000000000000029 /* WidgetHostAPITests.swift in Sources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+			C10000010000000000000001 /* XCRemoteSwiftPackageReference "swift-sqlcipher" */ = {
+				isa = XCRemoteSwiftPackageReference;
+				repositoryURL = "https://github.com/skiptools/swift-sqlcipher.git";
+				requirement = {
+					kind = upToNextMajorVersion;
+					minimumVersion = 1.4.0;
+				};
+			};
+			C10000040000000000000004 /* XCRemoteSwiftPackageReference "Nuke" */ = {
+				isa = XCRemoteSwiftPackageReference;
+				repositoryURL = "https://github.com/kean/Nuke.git";
+				requirement = {
+					kind = upToNextMinorVersion;
+					minimumVersion = 12.8.0;
+				};
+			};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+			C10000020000000000000002 /* SQLCipher */ = {
+				isa = XCSwiftPackageProductDependency;
+				package = C10000010000000000000001 /* XCRemoteSwiftPackageReference "swift-sqlcipher" */;
+				productName = SQLCipher;
+			};
+			C10000030000000000000003 /* SQLCipher */ = {
+				isa = XCSwiftPackageProductDependency;
+				package = C10000010000000000000001 /* XCRemoteSwiftPackageReference "swift-sqlcipher" */;
+				productName = SQLCipher;
+			};
+			C10000050000000000000005 /* Nuke */ = {
+				isa = XCSwiftPackageProductDependency;
+				package = C10000040000000000000004 /* XCRemoteSwiftPackageReference "Nuke" */;
+				productName = Nuke;
+			};
+			C10000060000000000000006 /* Nuke */ = {
+				isa = XCSwiftPackageProductDependency;
+				package = C10000040000000000000004 /* XCRemoteSwiftPackageReference "Nuke" */;
+				productName = Nuke;
+			};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B10000010000000000000001 /* Debug */ = {
@@ -335,6 +510,44 @@
 			};
 			name = Release;
 		};
+		B20000030000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@loader_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.notchapp.NotchAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B20000040000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@loader_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.notchapp.NotchAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -352,6 +565,15 @@
 			buildConfigurations = (
 				B10000010000000000000001 /* Debug */,
 				B10000020000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000030000000000000003 /* Build configuration list for PBXNativeTarget "NotchAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000030000000000000003 /* Debug */,
+				B20000040000000000000004 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

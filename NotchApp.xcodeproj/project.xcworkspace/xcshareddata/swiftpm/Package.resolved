@@ -1,0 +1,24 @@
+{
+  "originHash" : "c5b6b96b1a312621e359cada042fdbf55ca6787848401e727a51508def41c513",
+  "pins" : [
+    {
+      "identity" : "nuke",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kean/Nuke.git",
+      "state" : {
+        "revision" : "0ead44350d2737db384908569c012fe67c421e4d",
+        "version" : "12.8.0"
+      }
+    },
+    {
+      "identity" : "swift-sqlcipher",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/skiptools/swift-sqlcipher.git",
+      "state" : {
+        "revision" : "d21dbf081fdb31576e5122f9f56e3b0505ec419d",
+        "version" : "1.8.0"
+      }
+    }
+  ],
+  "version" : 3
+}

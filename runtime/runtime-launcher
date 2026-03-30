@@ -67,7 +67,14 @@ PY
 bootstrap_deps() {
   if [ ! -d "$SDK_ROOT/node_modules/notchapp" ]; then
     echo "Installing widget tooling dependencies..."
-    "$NPM_BIN" install --prefix "$SDK_ROOT"
+    "$NPM_BIN" ci --prefix "$SDK_ROOT"
+  fi
+}
+
+bootstrap_runtime_deps() {
+  if [ -f "$RUNTIME_ROOT/package.json" ] && [ ! -d "$RUNTIME_ROOT/node_modules/react" ]; then
+    echo "Installing widget runtime dependencies..."
+    "$NPM_BIN" ci --prefix "$RUNTIME_ROOT"
   fi
 }
 
@@ -75,10 +82,11 @@ bootstrap_node
 export PATH="$NODE_ROOT/bin:$PATH"
 export npm_config_cache="$NPM_CACHE_DIR"
 bootstrap_deps
+bootstrap_runtime_deps
 
-if [ "${1:-}" = "worker" ]; then
+if [ "${1:-}" = "v2" ]; then
   shift
-  exec "$NODE_BIN" "$RUNTIME_ROOT/runtime-worker.mjs" "$@"
+  exec "$NODE_BIN" "$RUNTIME_ROOT/runtime-v2.mjs" "$@"
 fi
 
 exec "$NODE_BIN" "$SDK_ROOT/packages/notchapp/cli.mjs" "$@"
