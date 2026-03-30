@@ -418,9 +418,13 @@ private struct WidgetCard: View {
                     Text(definition.title)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(definition.caption)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.42))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
 
                 Spacer(minLength: 0)
