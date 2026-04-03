@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+import CoreGraphics
 
 private let appSettingsBackgroundColor = NSColor(
     calibratedRed: 0.02,
@@ -11,8 +12,8 @@ private let appSettingsBackgroundColor = NSColor(
 
 enum AppSettingsWindow {
     @MainActor
-    static func open() {
-        AppSettingsWindowController.shared.show()
+    static func open(tab: AppSettingsTab = .general) {
+        AppSettingsWindowController.shared.show(tab: tab)
     }
 }
 
@@ -64,10 +65,11 @@ private final class AppSettingsWindowController: NSWindowController, NSWindowDel
         fatalError("init(coder:) has not been implemented")
     }
 
-    func show() {
+    func show(tab: AppSettingsTab) {
         guard let window else { return }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .appSettingsTabSelectionDidChange, object: tab)
         showWindow(nil)
         window.makeKeyAndOrderFront(nil)
     }
@@ -88,7 +90,7 @@ private final class AppSettingsWindowController: NSWindowController, NSWindowDel
     }
 }
 
-private enum AppSettingsTab: String, CaseIterable, Identifiable {
+enum AppSettingsTab: String, CaseIterable, Identifiable {
     case general
     case widgets
     case about
@@ -138,10 +140,7 @@ struct AppSettingsView: View {
                         description: "Widget-specific settings and management will live here."
                     )
                 case .about:
-                    SettingsPlaceholderPage(
-                        title: "About",
-                        description: "App information, credits, and links will live here."
-                    )
+                    AboutSettingsPage()
                 }
             }
         }
@@ -155,6 +154,11 @@ struct AppSettingsView: View {
         .preferredColorScheme(.dark)
         .onReceive(NotificationCenter.default.publisher(for: .accentColorPreferenceDidChange)) { _ in
             accentColor = Preferences.accentColor
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .appSettingsTabSelectionDidChange)) { notification in
+            if let tab = notification.object as? AppSettingsTab {
+                selection = tab
+            }
         }
     }
 
@@ -175,6 +179,10 @@ struct AppSettingsView: View {
         .padding(.top, 32)
         .padding(.bottom, 6)
     }
+}
+
+extension Notification.Name {
+    static let appSettingsTabSelectionDidChange = Notification.Name("appSettingsTabSelectionDidChange")
 }
 
 private struct GeneralSettingsPage: View {
@@ -408,6 +416,607 @@ private struct SettingsPlaceholderPage: View {
         default:
             return "slider.horizontal.3"
         }
+    }
+}
+
+private struct AboutSettingsPage: View {
+    private let profileURL = URL(string: "https://github.com/itstauq")!
+    private let repositoryURL = URL(string: "https://github.com/itstauq/NotchApp")!
+    private let issuesURL = URL(string: "https://github.com/itstauq/NotchApp/issues")!
+    private let xProfileURL = URL(string: "https://x.com/itstauq")!
+
+    private var appName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        ?? Bundle.main.object(forInfoDictionaryKey: kCFBundleNameKey as String) as? String
+        ?? "NotchApp"
+    }
+
+    private var versionString: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: kCFBundleVersionKey as String) as? String ?? "1"
+        return "Version \(version) (\(build))"
+    }
+
+    private var bundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? "com.notchapp.NotchApp"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(spacing: 20) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color.white.opacity(0.14),
+                                        Color.white.opacity(0.03),
+                                        .clear
+                                    ],
+                                    center: .center,
+                                    startRadius: 12,
+                                    endRadius: 120
+                                )
+                            )
+                            .frame(width: 180, height: 180)
+                            .blur(radius: 10)
+
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .fill(.white.opacity(0.04))
+                            .frame(width: 122, height: 122)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                            )
+
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: 88, height: 88)
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .shadow(color: .black.opacity(0.26), radius: 14, y: 8)
+                    }
+
+                    VStack(spacing: 8) {
+                        Text(appName)
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.97))
+
+                        Text("Widget-powered notch utilities for macOS.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.58))
+                    }
+
+                    HStack(spacing: 10) {
+                        AboutBadge(title: versionString)
+                        AboutBadge(title: "Apache 2.0")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Support the project")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.44))
+                        .textCase(.uppercase)
+
+                    VStack(spacing: 12) {
+                        Link(destination: repositoryURL) {
+                            AboutActionButton(
+                                title: "Star on GitHub",
+                                subtitle: "Give the repo a star to help it rank higher and reach more people.",
+                                style: .star
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                    Link(destination: xProfileURL) {
+                        AboutActionButton(
+                            title: "Follow on X",
+                            subtitle: "@itstauq",
+                            style: .x
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Link(destination: profileURL) {
+                        AboutActionButton(
+                            title: "Follow on GitHub",
+                            subtitle: "github.com/itstauq",
+                            style: .github
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Link(destination: issuesURL) {
+                        AboutActionButton(
+                            title: "Report an Issue",
+                            subtitle: "Open a bug report or share product feedback.",
+                            style: .subtle(symbolName: "ladybug")
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.white.opacity(0.03))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                    )
+                }
+                .frame(maxWidth: 580)
+
+                VStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        AboutInfoRow(label: "Bundle ID", value: bundleIdentifier)
+                        AboutInfoLinkRow(
+                            label: "Repository",
+                            value: "github.com/itstauq/NotchApp",
+                            destination: repositoryURL
+                        )
+                        AboutInfoRow(label: "Commit", value: "b8da031")
+                    }
+                    .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                    )
+                }
+                .frame(maxWidth: 580)
+
+                Text("NotchApp is free and open source software released under the Apache 2.0 license.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 520)
+            }
+            .frame(maxWidth: 660, alignment: .top)
+            .padding(.horizontal, 24)
+            .padding(.top, 34)
+            .padding(.bottom, 40)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollIndicators(.never)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct AboutBadge: View {
+    var title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.74))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(.white.opacity(0.07), in: Capsule(style: .continuous))
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+            )
+    }
+}
+
+private struct AboutInfoRow: View {
+    var label: String
+    var value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.56))
+
+            Spacer(minLength: 20)
+
+            Text(value)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.84))
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .overlay(alignment: .bottom) {
+            Divider()
+                .overlay(Color.white.opacity(0.05))
+                .padding(.leading, 16)
+                .opacity(label == "Commit" ? 0 : 1)
+        }
+    }
+}
+
+private struct AboutInfoLinkRow: View {
+    var label: String
+    var value: String
+    var destination: URL
+
+    var body: some View {
+        Link(destination: destination) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                Text(label)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.56))
+
+                Spacer(minLength: 20)
+
+                HStack(spacing: 6) {
+                    Text(value)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .multilineTextAlignment(.trailing)
+
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.42))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) {
+            Divider()
+                .overlay(Color.white.opacity(0.05))
+                .padding(.leading, 16)
+        }
+    }
+}
+
+private struct AboutActionButton: View {
+    var title: String
+    var subtitle: String
+    var style: AboutActionStyle
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(iconBackground)
+                .frame(width: 42, height: 42)
+                .overlay {
+                    AboutActionIcon(style: style)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(titleColor)
+
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(chevronColor)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(backgroundFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(borderColor, lineWidth: 1)
+        )
+    }
+
+    private var backgroundFill: Color {
+        switch style {
+        case .star:
+            return Color(red: 0.37, green: 0.26, blue: 0.05).opacity(0.96)
+        case .x:
+            return Color(red: 0.07, green: 0.07, blue: 0.09).opacity(0.98)
+        case .github:
+            return Color(red: 0.13, green: 0.14, blue: 0.16).opacity(0.97)
+        case .neutral:
+            return .white.opacity(0.055)
+        case .subtle:
+            return .white.opacity(0.04)
+        }
+    }
+
+    private var borderColor: Color {
+        switch style {
+        case .star:
+            return Color(red: 1.0, green: 0.78, blue: 0.26).opacity(0.42)
+        case .x:
+            return Color.white.opacity(0.16)
+        case .github:
+            return Color.white.opacity(0.18)
+        case .neutral:
+            return .white.opacity(0.08)
+        case .subtle:
+            return .white.opacity(0.05)
+        }
+    }
+
+    private var iconBackground: Color {
+        switch style {
+        case .star:
+            return Color(red: 1.0, green: 0.74, blue: 0.18).opacity(0.28)
+        case .x:
+            return Color.white.opacity(0.09)
+        case .github:
+            return Color.white.opacity(0.11)
+        case .neutral, .subtle:
+            return .white.opacity(0.06)
+        }
+    }
+
+    private var iconForeground: Color {
+        switch style {
+        case .star:
+            return Color(red: 1.0, green: 0.88, blue: 0.52)
+        case .x, .github:
+            return .white.opacity(0.94)
+        case .neutral, .subtle:
+            return .white.opacity(0.84)
+        }
+    }
+
+    private var titleColor: Color {
+        if case .subtle = style {
+            return .white.opacity(0.82)
+        }
+        return .white.opacity(0.92)
+    }
+
+    private var subtitleColor: Color {
+        if case .subtle = style {
+            return .white.opacity(0.4)
+        }
+        return .white.opacity(style == .star ? 0.68 : 0.54)
+    }
+
+    private var chevronColor: Color {
+        switch style {
+        case .star:
+            return .white.opacity(0.5)
+        case .subtle:
+            return .white.opacity(0.26)
+        case .x, .github:
+            return .white.opacity(0.42)
+        case .neutral:
+            return .white.opacity(0.34)
+        }
+    }
+}
+
+private enum AboutActionStyle: Equatable {
+    case star
+    case x
+    case github
+    case neutral(symbolName: String)
+    case subtle(symbolName: String)
+}
+
+private struct AboutActionIcon: View {
+    var style: AboutActionStyle
+
+    var body: some View {
+        switch style {
+        case .star:
+            Image(systemName: "star.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(red: 1.0, green: 0.88, blue: 0.52))
+        case .x:
+            BrandMarkView(brand: .x)
+                .frame(width: 12, height: 12)
+        case .github:
+            BrandMarkView(brand: .github)
+                .frame(width: 13, height: 13)
+        case .neutral(let symbolName), .subtle(let symbolName):
+            Image(systemName: symbolName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.84))
+        }
+    }
+}
+
+private struct BrandMarkView: View {
+    enum Brand {
+        case github
+        case x
+
+        var pathData: String {
+            switch self {
+            case .github:
+                return "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+            case .x:
+                return "M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"
+            }
+        }
+    }
+
+    var brand: Brand
+
+    var body: some View {
+        GeometryReader { geometry in
+            let scaledPath = SVGPathCache.path(for: brand.pathData)
+                .scaledToFit(in: geometry.size, viewBox: CGSize(width: 24, height: 24))
+            Path(scaledPath)
+                .fill(.white.opacity(0.94))
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
+private enum SVGPathCache {
+    private static var cache: [String: CGPath] = [:]
+
+    static func path(for pathData: String) -> CGPath {
+        if let cached = cache[pathData] {
+            return cached
+        }
+        let parsed = SVGPathParser(pathData).makePath()
+        cache[pathData] = parsed
+        return parsed
+    }
+}
+
+private struct SVGPathParser {
+    private enum Token {
+        case command(Character)
+        case number(CGFloat)
+    }
+
+    private let tokens: [Token]
+
+    init(_ pathData: String) {
+        tokens = Self.tokenize(pathData)
+    }
+
+    func makePath() -> CGPath {
+        let path = CGMutablePath()
+        var index = 0
+        var current = CGPoint.zero
+        var subpathStart = CGPoint.zero
+        var command: Character = " "
+
+        func nextNumber() -> CGFloat? {
+            guard index < tokens.count else { return nil }
+            guard case let .number(value) = tokens[index] else { return nil }
+            index += 1
+            return value
+        }
+
+        while index < tokens.count {
+            if case let .command(nextCommand) = tokens[index] {
+                command = nextCommand
+                index += 1
+            }
+
+            switch command {
+            case "M", "m":
+                guard let x = nextNumber(), let y = nextNumber() else { break }
+                let point = command == "m"
+                    ? CGPoint(x: current.x + x, y: current.y + y)
+                    : CGPoint(x: x, y: y)
+                path.move(to: point)
+                current = point
+                subpathStart = point
+                command = command == "m" ? "l" : "L"
+
+            case "L", "l":
+                while let x = nextNumber(), let y = nextNumber() {
+                    let point = command == "l"
+                        ? CGPoint(x: current.x + x, y: current.y + y)
+                        : CGPoint(x: x, y: y)
+                    path.addLine(to: point)
+                    current = point
+                }
+
+            case "H", "h":
+                while let x = nextNumber() {
+                    let point = CGPoint(x: command == "h" ? current.x + x : x, y: current.y)
+                    path.addLine(to: point)
+                    current = point
+                }
+
+            case "V", "v":
+                while let y = nextNumber() {
+                    let point = CGPoint(x: current.x, y: command == "v" ? current.y + y : y)
+                    path.addLine(to: point)
+                    current = point
+                }
+
+            case "C", "c":
+                while
+                    let x1 = nextNumber(),
+                    let y1 = nextNumber(),
+                    let x2 = nextNumber(),
+                    let y2 = nextNumber(),
+                    let x = nextNumber(),
+                    let y = nextNumber()
+                {
+                    let control1 = command == "c"
+                        ? CGPoint(x: current.x + x1, y: current.y + y1)
+                        : CGPoint(x: x1, y: y1)
+                    let control2 = command == "c"
+                        ? CGPoint(x: current.x + x2, y: current.y + y2)
+                        : CGPoint(x: x2, y: y2)
+                    let point = command == "c"
+                        ? CGPoint(x: current.x + x, y: current.y + y)
+                        : CGPoint(x: x, y: y)
+                    path.addCurve(to: point, control1: control1, control2: control2)
+                    current = point
+                }
+
+            case "Z", "z":
+                path.closeSubpath()
+                current = subpathStart
+
+            default:
+                index += 1
+            }
+        }
+
+        return path
+    }
+
+    private static func tokenize(_ string: String) -> [Token] {
+        var tokens: [Token] = []
+        var number = ""
+
+        func flushNumber() {
+            guard !number.isEmpty, let value = Double(number) else {
+                number.removeAll(keepingCapacity: true)
+                return
+            }
+            tokens.append(.number(CGFloat(value)))
+            number.removeAll(keepingCapacity: true)
+        }
+
+        let commands = Set("MmLlHhVvCcZz")
+        var previousCharacter: Character?
+
+        for character in string {
+            if commands.contains(character) {
+                flushNumber()
+                tokens.append(.command(character))
+            } else if character == "-" {
+                if let previousCharacter, previousCharacter != "e", previousCharacter != "E" {
+                    flushNumber()
+                }
+                number.append(character)
+            } else if character == "." {
+                if number.contains(".") {
+                    flushNumber()
+                }
+                number.append(character)
+            } else if character == "," || character.isWhitespace {
+                flushNumber()
+            } else {
+                number.append(character)
+            }
+            previousCharacter = character
+        }
+
+        flushNumber()
+        return tokens
+    }
+}
+
+private extension CGPath {
+    func scaledToFit(in size: CGSize, viewBox: CGSize) -> CGPath {
+        let scale = min(size.width / viewBox.width, size.height / viewBox.height)
+        let scaledWidth = viewBox.width * scale
+        let scaledHeight = viewBox.height * scale
+        let translationX = (size.width - scaledWidth) / 2
+        let translationY = (size.height - scaledHeight) / 2
+        var transform = CGAffineTransform.identity
+            .translatedBy(x: translationX, y: translationY)
+            .scaledBy(x: scale, y: scale)
+        return copy(using: &transform) ?? self
     }
 }
 

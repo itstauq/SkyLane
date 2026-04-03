@@ -271,8 +271,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "rectangle.topthird.inset.filled", accessibilityDescription: "NotchApp")
         }
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(makeStatusMenuItem(
+            title: "Settings",
+            systemImageName: "gearshape",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        ))
+        menu.addItem(makeStatusMenuItem(
+            title: "About",
+            systemImageName: "info.circle",
+            action: #selector(openAbout),
+            keyEquivalent: ""
+        ))
+        menu.addItem(.separator())
+        menu.addItem(makeStatusMenuItem(
+            title: "Quit",
+            systemImageName: "power",
+            action: #selector(quit),
+            keyEquivalent: "q"
+        ))
+        menu.items.forEach { $0.target = self }
         statusItem?.menu = menu
+    }
+
+    private func makeStatusMenuItem(
+        title: String,
+        systemImageName: String,
+        action: Selector,
+        keyEquivalent: String
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.image = NSImage(
+            systemSymbolName: systemImageName,
+            accessibilityDescription: title
+        )
+        return item
     }
 
     private func removeStatusBar() {
@@ -409,6 +442,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func openSettings() {
+        AppSettingsWindow.open(tab: .general)
+    }
+
+    @objc private func openAbout() {
+        AppSettingsWindow.open(tab: .about)
     }
 
     private func registerURLHandler() {
