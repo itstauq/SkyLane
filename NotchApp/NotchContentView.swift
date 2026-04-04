@@ -1356,8 +1356,8 @@ struct WidgetCameraDeviceOption: Codable, Equatable {
 }
 
 @MainActor
-final class WidgetCameraController: ObservableObject {
-    static let shared = WidgetCameraController()
+final class WidgetCameraPermissionController: ObservableObject {
+    static let shared = WidgetCameraPermissionController()
 
     enum State: Equatable {
         case idle
@@ -1369,29 +1369,13 @@ final class WidgetCameraController: ObservableObject {
     }
 
     @Published private(set) var state: State = .idle
-    let session = AVCaptureSession()
-
-    private let sessionQueue = DispatchQueue(label: "com.notchapp.camera")
-    private var didConfigureSession = false
-    private var isStarting = false
-    private var currentDeviceID: String?
-    private var visiblePreviewIDs: Set<UUID> = []
     private var suspendedPanelsPendingRestore: [SuspendedNotchPanelState]?
     private var appDidBecomeActiveObserver: NSObjectProtocol?
-
-    func previewDidAppear(_ id: UUID) {
-        visiblePreviewIDs.insert(id)
-    }
-
-    func previewDidDisappear(_ id: UUID) {
-        visiblePreviewIDs.remove(id)
-        stopSessionIfUnused()
-    }
 
     func ensureStarted() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            startSessionIfNeeded()
+            state = .ready
         case .notDetermined:
             if state == .idle {
                 state = .needsPermission
@@ -1403,67 +1387,10 @@ final class WidgetCameraController: ObservableObject {
         }
     }
 
-    func availableDevices() -> [WidgetCameraDeviceOption] {
-        let devices = discoverDevices()
-        let selectedDeviceID = effectiveSelectedDeviceID(from: devices)
-
-        if devices.isEmpty, let fallback = AVCaptureDevice.default(for: .video) {
-            return [
-                WidgetCameraDeviceOption(
-                    id: fallback.uniqueID,
-                    name: fallback.localizedName,
-                    selected: selectedDeviceID == fallback.uniqueID
-                )
-            ]
-        }
-
-        return devices.map { device in
-            WidgetCameraDeviceOption(
-                id: device.uniqueID,
-                name: device.localizedName,
-                selected: selectedDeviceID == device.uniqueID
-            )
-        }
-    }
-
-    func selectDevice(id: String) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            sessionQueue.async {
-                do {
-                    try self.configureSessionIfNeeded()
-                    try self.switchToDeviceIfNeeded(id: id)
-                    if !self.session.isRunning {
-                        self.session.startRunning()
-                    }
-
-                    Task { @MainActor in
-                        Preferences.selectedCameraDeviceID = id
-                        self.state = .ready
-                    }
-                    continuation.resume()
-                } catch {
-                    Task { @MainActor in
-                        self.state = .unavailable(error.localizedDescription)
-                    }
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
-    }
-
-    private func stopSessionIfUnused() {
-        guard visiblePreviewIDs.isEmpty else { return }
-        sessionQueue.async {
-            if self.session.isRunning {
-                self.session.stopRunning()
-            }
-        }
-    }
-
     func requestPermission() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            startSessionIfNeeded()
+            state = .ready
         case .notDetermined:
             guard state != .requesting else { return }
             state = .requesting
@@ -1472,7 +1399,7 @@ final class WidgetCameraController: ObservableObject {
                 Task { @MainActor in
                     defer { self.restoreNotchPanels(suspendedPanels) }
                     if granted {
-                        self.startSessionIfNeeded()
+                        self.state = .ready
                     } else {
                         self.state = .denied
                     }
@@ -1490,7 +1417,40 @@ final class WidgetCameraController: ObservableObject {
         }
     }
 
-    private func startSessionIfNeeded() {
+    func setUnavailable(_ message: String) {
+        state = .unavailable(message)
+    }
+}
+
+@MainActor
+final class WidgetCameraSessionController: ObservableObject {
+    @Published private(set) var sessionErrorMessage: String?
+    let session = AVCaptureSession()
+
+    private let preferredDeviceID: String?
+    private let sessionQueue = DispatchQueue(label: "com.notchapp.camera")
+    private var didConfigureSession = false
+    private var isStarting = false
+    private var currentDeviceID: String?
+    private var visiblePreviewIDs: Set<UUID> = []
+
+    init(preferredDeviceID: String?) {
+        self.preferredDeviceID = preferredDeviceID
+    }
+
+    func previewDidAppear(_ id: UUID) {
+        visiblePreviewIDs.insert(id)
+        ensureStarted()
+    }
+
+    func previewDidDisappear(_ id: UUID) {
+        visiblePreviewIDs.remove(id)
+        stopSessionIfUnused()
+    }
+
+    func ensureStarted() {
+        guard !visiblePreviewIDs.isEmpty else { return }
+        guard WidgetCameraPermissionController.shared.state == .ready else { return }
         guard !isStarting else { return }
         isStarting = true
 
@@ -1503,16 +1463,48 @@ final class WidgetCameraController: ObservableObject {
 
             do {
                 try self.configureSessionIfNeeded()
+                try self.switchToPreferredDeviceIfNeeded()
                 if !self.session.isRunning {
                     self.session.startRunning()
                 }
                 Task { @MainActor in
-                    self.state = .ready
+                    self.sessionErrorMessage = nil
                 }
             } catch {
                 Task { @MainActor in
-                    self.state = .unavailable(error.localizedDescription)
+                    self.sessionErrorMessage = error.localizedDescription
                 }
+            }
+        }
+    }
+
+    func refreshPreferredDeviceIfNeeded() {
+        guard !visiblePreviewIDs.isEmpty else { return }
+        guard WidgetCameraPermissionController.shared.state == .ready else { return }
+
+        sessionQueue.async {
+            do {
+                try self.configureSessionIfNeeded()
+                try self.switchToPreferredDeviceIfNeeded()
+                if !self.session.isRunning {
+                    self.session.startRunning()
+                }
+                Task { @MainActor in
+                    self.sessionErrorMessage = nil
+                }
+            } catch {
+                Task { @MainActor in
+                    self.sessionErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func stopSessionIfUnused() {
+        guard visiblePreviewIDs.isEmpty else { return }
+        sessionQueue.async {
+            if self.session.isRunning {
+                self.session.stopRunning()
             }
         }
     }
@@ -1527,8 +1519,7 @@ final class WidgetCameraController: ObservableObject {
 
         session.sessionPreset = .high
 
-        let devices = discoverDevices()
-        let preferredDeviceID = Preferences.selectedCameraDeviceID
+        let devices = WidgetCameraRegistry.discoverDevices()
         let device =
             devices.first(where: { $0.uniqueID == preferredDeviceID })
             ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
@@ -1556,18 +1547,12 @@ final class WidgetCameraController: ObservableObject {
         didConfigureSession = true
     }
 
-    private func switchToDeviceIfNeeded(id: String) throws {
-        guard currentDeviceID != id else { return }
+    private func switchToPreferredDeviceIfNeeded() throws {
+        guard let preferredDeviceID, currentDeviceID != preferredDeviceID else { return }
 
-        let devices = discoverDevices()
-
-        let fallback = AVCaptureDevice.default(for: .video)
-        guard let device = devices.first(where: { $0.uniqueID == id }) ?? fallback, device.uniqueID == id else {
-            throw NSError(
-                domain: "NotchCamera",
-                code: 3,
-                userInfo: [NSLocalizedDescriptionKey: "Requested camera is no longer available."]
-            )
+        let devices = WidgetCameraRegistry.discoverDevices()
+        guard let device = devices.first(where: { $0.uniqueID == preferredDeviceID }) else {
+            return
         }
 
         let input = try AVCaptureDeviceInput(device: device)
@@ -1584,7 +1569,7 @@ final class WidgetCameraController: ObservableObject {
         guard session.canAddInput(input) else {
             throw NSError(
                 domain: "NotchCamera",
-                code: 4,
+                code: 3,
                 userInfo: [NSLocalizedDescriptionKey: "Unable to switch to the selected camera."]
             )
         }
@@ -1592,8 +1577,61 @@ final class WidgetCameraController: ObservableObject {
         session.addInput(input)
         currentDeviceID = device.uniqueID
     }
+}
 
-    private func discoverDevices() -> [AVCaptureDevice] {
+@MainActor
+final class WidgetCameraRegistry {
+    static let shared = WidgetCameraRegistry()
+
+    private var controllers: [String: WidgetCameraSessionController] = [:]
+    private let defaultKey = "__default__"
+
+    func controller(for preferredDeviceID: String?) -> WidgetCameraSessionController {
+        let devices = Self.discoverDevices()
+        let key = Self.effectiveSelectedDeviceID(
+            preferredDeviceID: preferredDeviceID,
+            from: devices
+        ) ?? defaultKey
+        if let existing = controllers[key] {
+            return existing
+        }
+
+        let controller = WidgetCameraSessionController(preferredDeviceID: key == defaultKey ? nil : key)
+        controllers[key] = controller
+        return controller
+    }
+
+    func availableDevices(selectedDeviceID: String?) -> [WidgetCameraDeviceOption] {
+        let devices = Self.discoverDevices()
+        let effectiveSelectedDeviceID = Self.effectiveSelectedDeviceID(
+            preferredDeviceID: selectedDeviceID,
+            from: devices
+        )
+
+        if selectedDeviceID?.isEmpty == false {
+            controller(for: selectedDeviceID).refreshPreferredDeviceIfNeeded()
+        }
+
+        if devices.isEmpty, let fallback = AVCaptureDevice.default(for: .video) {
+            return [
+                WidgetCameraDeviceOption(
+                    id: fallback.uniqueID,
+                    name: fallback.localizedName,
+                    selected: effectiveSelectedDeviceID == fallback.uniqueID
+                )
+            ]
+        }
+
+        return devices.map { device in
+            WidgetCameraDeviceOption(
+                id: device.uniqueID,
+                name: device.localizedName,
+                selected: effectiveSelectedDeviceID == device.uniqueID
+            )
+        }
+    }
+
+    static func discoverDevices() -> [AVCaptureDevice] {
         AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
             mediaType: .video,
@@ -1601,12 +1639,11 @@ final class WidgetCameraController: ObservableObject {
         ).devices
     }
 
-    private func effectiveSelectedDeviceID(from devices: [AVCaptureDevice]) -> String? {
-        if let currentDeviceID {
-            return currentDeviceID
-        }
-
-        if let preferredDeviceID = Preferences.selectedCameraDeviceID,
+    static func effectiveSelectedDeviceID(
+        preferredDeviceID: String?,
+        from devices: [AVCaptureDevice]
+    ) -> String? {
+        if let preferredDeviceID,
            devices.contains(where: { $0.uniqueID == preferredDeviceID }) {
             return preferredDeviceID
         }
@@ -1707,18 +1744,31 @@ private struct RuntimeV2MenuItemView: View {
 
 private struct RuntimeV2CameraNodeView: View {
     var node: RenderNodeV2
-    @StateObject private var controller = WidgetCameraController.shared
+    @StateObject private var permissionController = WidgetCameraPermissionController.shared
     @State private var previewID = UUID()
+    @State private var sessionRevision = 0
 
     private var isMirrored: Bool {
         node.bool("mirrored") ?? false
     }
 
+    private var preferredDeviceID: String? {
+        node.string("deviceId")
+    }
+
+    private var controller: WidgetCameraSessionController {
+        WidgetCameraRegistry.shared.controller(for: preferredDeviceID)
+    }
+
     var body: some View {
         Group {
-            switch controller.state {
+            switch permissionController.state {
             case .ready:
-                RuntimeV2CameraSessionView(session: controller.session, mirrored: isMirrored)
+                if controller.sessionErrorMessage != nil {
+                    fallback(symbol: "camera.metering.unknown", title: "Camera Unavailable")
+                } else {
+                    RuntimeV2CameraSessionView(session: controller.session, mirrored: isMirrored)
+                }
             case .needsPermission:
                 permissionPrompt
             case .denied:
@@ -1733,11 +1783,25 @@ private struct RuntimeV2CameraNodeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+            permissionController.ensureStarted()
             controller.previewDidAppear(previewID)
-            controller.ensureStarted()
         }
         .onDisappear {
             controller.previewDidDisappear(previewID)
+        }
+        .onChange(of: permissionController.state) { _, newState in
+            if newState == .ready {
+                controller.ensureStarted()
+            }
+        }
+        .onChange(of: preferredDeviceID) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            WidgetCameraRegistry.shared.controller(for: oldValue).previewDidDisappear(previewID)
+            let nextController = WidgetCameraRegistry.shared.controller(for: newValue)
+            nextController.previewDidAppear(previewID)
+        }
+        .onReceive(controller.objectWillChange) { _ in
+            sessionRevision &+= 1
         }
     }
 
@@ -1756,7 +1820,7 @@ private struct RuntimeV2CameraNodeView: View {
                 .foregroundStyle(.white.opacity(0.82))
 
             Button {
-                controller.requestPermission()
+                permissionController.requestPermission()
             } label: {
                 Text(buttonLabel)
                     .font(.system(size: 11, weight: .semibold))
@@ -1799,7 +1863,7 @@ private struct SuspendedNotchPanelState {
 }
 
 @MainActor
-private extension WidgetCameraController {
+private extension WidgetCameraPermissionController {
     func suspendNotchPanels() -> [SuspendedNotchPanelState] {
         let suspended = NotchPanel.allPanels.map { panel in
             SuspendedNotchPanelState(panel: panel, alphaValue: panel.alphaValue, wasVisible: panel.isVisible)

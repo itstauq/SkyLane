@@ -39,6 +39,7 @@ export default function Widget() {
 
   return (
     <Camera
+      deviceId={preferences.cameraDeviceId}
       mirrored={mirrorPreview}
       frame={{ maxWidth: Infinity, maxHeight: Infinity }}
       clipShape={{ type: "roundedRect", cornerRadius: 16 }}
@@ -77,17 +78,6 @@ export default function Widget() {
                 Mirror Preview
               </Button>
             </Menu>
-          ),
-        },
-        {
-          alignment: "topTrailing",
-          node: (
-            <Circle
-              size={170}
-              fill="#FFFFFF08"
-              pointerEvents="none"
-              padding={{ top: -34, trailing: -34 }}
-            />
           ),
         },
       ]}

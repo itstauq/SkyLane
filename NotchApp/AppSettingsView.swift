@@ -487,15 +487,27 @@ private struct WidgetsSettingsPage: View {
             selectedPreferenceValues = [:]
             return
         }
-        selectedPreferenceValues = preferenceStore.preferenceValues(
+        var resolvedValues = preferenceStore.resolvedPreferenceValues(
             widgetID: selectedItem.widgetID,
+            preferences: selectedItem.preferences.map {
+                WidgetStoragePreferenceDefinition(
+                    name: $0.name,
+                    kind: storagePreferenceKind(for: $0.type),
+                    isRequired: $0.isRequired,
+                    defaultValue: $0.defaultValue
+                )
+            },
             instanceID: selectedItem.id.uuidString
         )
         for preference in selectedItem.preferences where preference.type == .camera {
-            if let selectedCameraID = WidgetCameraController.shared.availableDevices().first(where: { $0.selected })?.id {
-                selectedPreferenceValues[preference.name] = .string(selectedCameraID)
+            if resolvedValues[preference.name] == nil,
+               let selectedCameraID = WidgetCameraRegistry.shared
+                .availableDevices(selectedDeviceID: nil)
+                .first(where: { $0.selected })?.id {
+                resolvedValues[preference.name] = .string(selectedCameraID)
             }
         }
+        selectedPreferenceValues = resolvedValues
     }
 
     private func savePreferenceValue(name: String, value: RuntimeJSONValue?) {
@@ -508,13 +520,6 @@ private struct WidgetsSettingsPage: View {
                 name: name,
                 value: value
             )
-            if let preference = selectedItem.preferences.first(where: { $0.name == name }),
-               preference.type == .camera,
-               let selectedCameraID = value?.stringValue,
-               !selectedCameraID.isEmpty {
-                Preferences.selectedCameraDeviceID = selectedCameraID
-                Task { try? await WidgetCameraController.shared.selectDevice(id: selectedCameraID) }
-            }
             loadSelectedPreferenceValues()
             NotificationCenter.default.post(
                 name: .widgetPreferencesDidChange,
@@ -530,6 +535,21 @@ private struct WidgetsSettingsPage: View {
     private func applyPendingWidgetSelectionIfNeeded() {
         guard let instanceID = AppSettingsWindow.consumeRequestedWidgetInstanceID() else { return }
         selectWidget(instanceID: instanceID)
+    }
+
+    private func storagePreferenceKind(for type: WidgetPreferenceType) -> WidgetStoragePreferenceKind {
+        switch type {
+        case .textfield:
+            return .text
+        case .password:
+            return .password
+        case .checkbox:
+            return .checkbox
+        case .dropdown:
+            return .dropdown
+        case .camera:
+            return .camera
+        }
     }
 }
 
@@ -768,7 +788,8 @@ private struct WidgetConfigurationSection: View {
             }
 
             var updated = preference
-            updated.data = WidgetCameraController.shared.availableDevices().map { device in
+            let selectedCameraID = preferenceValues[preference.name]?.stringValue
+            updated.data = WidgetCameraRegistry.shared.availableDevices(selectedDeviceID: selectedCameraID).map { device in
                 WidgetPreferenceDropdownItem(title: device.name, value: .string(device.id))
             }
             return updated

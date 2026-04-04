@@ -63,6 +63,11 @@ protocol WidgetHostLocalStorageHandling {
         name: String,
         value: RuntimeJSONValue?
     ) throws
+
+    func preferenceValues(
+        widgetID: String,
+        instanceID: String
+    ) -> [String: RuntimeJSONValue]
 }
 
 extension WidgetStorageManager: WidgetHostLocalStorageHandling {}
@@ -628,10 +633,15 @@ final class WidgetHostAPI {
             }
             return .null
         case "camera.listDevices":
-            return try encodeRuntimeJSONValue(WidgetCameraController.shared.availableDevices())
+            let selectedCameraID = resolvedPreferenceValues(
+                widgetID: widgetID,
+                instanceID: instanceID
+            )[cameraDevicePreferenceName]?.stringValue
+            return try encodeRuntimeJSONValue(
+                WidgetCameraRegistry.shared.availableDevices(selectedDeviceID: selectedCameraID)
+            )
         case "camera.selectDevice":
             let cameraParams = try decode(params, as: RuntimeCameraSelectDeviceParams.self)
-            try await WidgetCameraController.shared.selectDevice(id: cameraParams.id)
             try storage.setPreferenceValue(
                 widgetID: widgetID,
                 instanceID: instanceID,
@@ -662,5 +672,46 @@ final class WidgetHostAPI {
     private func encodeRuntimeJSONValue<Result: Encodable>(_ value: Result) throws -> RuntimeJSONValue {
         let data = try jsonEncoder.encode(value)
         return try jsonDecoder.decode(RuntimeJSONValue.self, from: data)
+    }
+
+    private func resolvedPreferenceValues(
+        widgetID: String,
+        instanceID: String
+    ) -> [String: RuntimeJSONValue] {
+        guard let storage = storage as? WidgetStorageManager else {
+            return storage.preferenceValues(widgetID: widgetID, instanceID: instanceID)
+        }
+
+        let viewManager = ViewManager()
+        let preferences = viewManager.definition(for: widgetID)?.preferences ?? []
+        let storagePreferences = preferences.map {
+            WidgetStoragePreferenceDefinition(
+                name: $0.name,
+                kind: storagePreferenceKind(for: $0.type),
+                isRequired: $0.isRequired,
+                defaultValue: $0.defaultValue
+            )
+        }
+
+        return storage.resolvedPreferenceValues(
+            widgetID: widgetID,
+            preferences: storagePreferences,
+            instanceID: instanceID
+        )
+    }
+
+    private func storagePreferenceKind(for type: WidgetPreferenceType) -> WidgetStoragePreferenceKind {
+        switch type {
+        case .textfield:
+            return .text
+        case .password:
+            return .password
+        case .checkbox:
+            return .checkbox
+        case .dropdown:
+            return .dropdown
+        case .camera:
+            return .camera
+        }
     }
 }
