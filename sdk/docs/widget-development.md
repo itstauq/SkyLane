@@ -110,10 +110,10 @@ Example:
 ```tsx
 import { Button, Stack, Text, LocalStorage } from "@notchapp/api";
 
-export default function Widget({ environment, logger }) {
+export default function Widget({ environment }) {
   const count = LocalStorage.getItem("count") ?? 0;
 
-  logger.info(`render span=${environment.span} count=${count}`);
+  console.info(`render span=${environment.span} count=${count}`);
 
   return (
     <Stack spacing={10}>
@@ -133,7 +133,6 @@ Use normal React state for transient UI state. Use `LocalStorage` when the state
 The render function receives:
 
 - `environment`
-- `logger`
 
 `environment.span` is the most useful field in practice. Use it to make your widget width-responsive and adapt to narrow or wide layouts.
 

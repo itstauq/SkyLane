@@ -48,23 +48,6 @@ function sessionIdFor(instanceId) {
   return `${instanceId}:${++sessionCounter}`;
 }
 
-function widgetLogger(widgetID) {
-  const emit = (level) => (...parts) => {
-    notify("log", {
-      widgetID,
-      level,
-      message: parts.map((part) => typeof part === "string" ? part : JSON.stringify(part)).join(" "),
-    });
-  };
-
-  return {
-    log: emit("log"),
-    info: emit("info"),
-    warn: emit("warn"),
-    error: emit("error"),
-  };
-}
-
 function clearWidget(widgetID, bundlePaths = [], { resetState = true } = {}) {
   if (resetState) {
     widgetStates.delete(widgetID);
@@ -128,17 +111,14 @@ function stateFor(widgetID, instanceID, mod) {
 function render(widgetID, instanceID, environment) {
   const { mod } = ensureWidget(widgetID);
   const state = stateFor(widgetID, instanceID, mod);
-  const logger = widgetLogger(widgetID);
   return mod.default({
     environment,
     state,
-    logger,
   });
 }
 
 function invokeAction(widgetID, instanceID, actionID, environment, payload) {
   const { mod } = ensureWidget(widgetID);
-  const logger = widgetLogger(widgetID);
   const state = stateFor(widgetID, instanceID, mod);
   const action = mod.actions?.[actionID];
 
@@ -146,7 +126,7 @@ function invokeAction(widgetID, instanceID, actionID, environment, payload) {
     throw rpcError(-32002, `Unknown action '${actionID}' for widget ${widgetID}.`);
   }
 
-  const nextState = action(state, { environment, logger, payload });
+  const nextState = action(state, { environment, payload });
   if (nextState !== undefined) {
     widgetStates.get(widgetID).set(instanceID, nextState);
   }

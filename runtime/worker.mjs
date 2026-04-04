@@ -93,7 +93,7 @@ function stringifyLogPart(part) {
   }
 }
 
-function createLogger() {
+function createConsole() {
   const emit = (level) => (...parts) => {
     send("log", {
       level,
@@ -106,6 +106,7 @@ function createLogger() {
     info: emit("info"),
     warn: emit("warn"),
     error: emit("error"),
+    debug: emit("debug"),
   };
 }
 
@@ -113,7 +114,6 @@ function buildWidgetProps(widgetModule) {
   return {
     ...currentProps,
     state: structuredClone(widgetModule.initialState ?? {}),
-    logger: createLogger(),
   };
 }
 
@@ -261,6 +261,7 @@ async function bootstrap() {
     getCurrentProps: () => currentProps,
     callRpc,
   };
+  globalThis.console = createConsole();
 
   widgetModule = loadWidgetBundle(bundlePath);
   WidgetComponent = typeof widgetModule?.default === "function"

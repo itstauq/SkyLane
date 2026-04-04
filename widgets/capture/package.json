@@ -1,0 +1,25 @@
+{
+  "name": "@notchapp/widget-capture",
+  "version": "0.1.1",
+  "private": true,
+  "scripts": {
+    "develop": "notchapp develop",
+    "build": "notchapp build",
+    "lint": "notchapp lint"
+  },
+  "devDependencies": {
+    "notchapp": "^0.1.1"
+  },
+  "dependencies": {
+    "@notchapp/api": "^0.1.1"
+  },
+  "notch": {
+    "id": "com.notchapp.capture",
+    "title": "Capture",
+    "description": "Quickly capture thoughts and tasks",
+    "icon": "square.and.pencil",
+    "minSpan": 3,
+    "maxSpan": 12,
+    "entry": "src/index.tsx"
+  }
+}

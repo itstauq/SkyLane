@@ -1019,7 +1019,9 @@ final class ViewManager {
         let widgets: [WidgetInstance]
         switch viewID {
         case SavedView.homeID:
-            widgets = []
+            widgets = [
+                widget("com.notchapp.capture", 0, 4)
+            ].compactMap { $0 }
         default:
             widgets = []
         }

@@ -1,9 +1,9 @@
 import { Button, Stack, Text, useLocalStorage } from "@notchapp/api";
 
-export default function Widget({ environment, logger }) {
+export default function Widget({ environment }) {
   const [count, setCount] = useLocalStorage("count", 0);
 
-  logger.info(`render hello widget span=${environment.span} count=${count}`);
+  console.info(`render hello widget span=${environment.span} count=${count}`);
 
   return (
     <Stack spacing={10}>

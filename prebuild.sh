@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_ROOT="$REPO_ROOT/runtime"
+WIDGETS_ROOT="$REPO_ROOT/widgets"
 DEST_ROOT="${1:-}"
 
 if [ -z "$DEST_ROOT" ]; then
@@ -28,3 +29,26 @@ cp "$RUNTIME_ROOT/react-shim.cjs" "$DEST_ROOT/react-shim.cjs"
 cp -R "$RUNTIME_ROOT/node_modules" "$DEST_ROOT/node_modules"
 cp -R "$REPO_ROOT/sdk/packages/api" "$DEST_ROOT/api"
 cp -R "$RUNTIME_ROOT/.build/tools/node" "$DEST_ROOT/node"
+
+if [ -d "$WIDGETS_ROOT" ]; then
+  WIDGET_BUILD_NODE="$RUNTIME_ROOT/.build/tools/node/bin/node"
+
+  if [ ! -x "$WIDGET_BUILD_NODE" ]; then
+    echo "Bundled widget build skipped: missing Node runtime at $WIDGET_BUILD_NODE" >&2
+    exit 1
+  fi
+
+  for widget_dir in "$WIDGETS_ROOT"/*; do
+    if [ ! -d "$widget_dir" ] || [ ! -f "$widget_dir/package.json" ]; then
+      continue
+    fi
+
+    (
+      cd "$widget_dir"
+      "$WIDGET_BUILD_NODE" "$REPO_ROOT/sdk/packages/notchapp/cli.mjs" build
+    )
+
+    widget_name="$(basename "$widget_dir")"
+    cp -R "$widget_dir" "$DEST_ROOT/widgets/$widget_name"
+  done
+fi
