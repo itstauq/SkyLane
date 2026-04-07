@@ -47,7 +47,6 @@ if [ -d "$MEDIA_ADAPTER_ROOT" ]; then
   cp "$MEDIA_ADAPTER_ROOT/mediaremote-adapter.pl" "$MEDIA_ADAPTER_DEST_ROOT/mediaremote-adapter.pl"
   chmod +x "$MEDIA_ADAPTER_DEST_ROOT/mediaremote-adapter.pl"
   cp -R "$MEDIA_ADAPTER_ROOT/MediaRemoteAdapter.framework" "$MEDIA_ADAPTER_DEST_ROOT/MediaRemoteAdapter.framework"
-  cp "$MEDIA_ADAPTER_ROOT/MediaRemoteAdapterTestClient" "$MEDIA_ADAPTER_DEST_ROOT/MediaRemoteAdapterTestClient"
   cp "$MEDIA_ADAPTER_ROOT/LICENSE" "$MEDIA_ADAPTER_DEST_ROOT/LICENSE"
   if [ -f "$MEDIA_ADAPTER_ROOT/UPSTREAM_VERSION" ]; then
     cp "$MEDIA_ADAPTER_ROOT/UPSTREAM_VERSION" "$MEDIA_ADAPTER_DEST_ROOT/UPSTREAM_VERSION"

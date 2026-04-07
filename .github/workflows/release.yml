@@ -101,6 +101,24 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             PROVISIONING_PROFILE=""
 
+      - name: Re-sign bundled release artifacts
+        run: |
+          APP_PATH="$PWD/.build/release/NotchApp.xcarchive/Products/Applications/NotchApp.app"
+          FRAMEWORK_PATH="$APP_PATH/Contents/Resources/WidgetRuntime/mediaremote-adapter/MediaRemoteAdapter.framework"
+
+          if [ -d "$FRAMEWORK_PATH" ]; then
+            codesign --force --sign "Developer ID Application" --timestamp "$FRAMEWORK_PATH"
+          fi
+
+          codesign --force \
+            --sign "Developer ID Application" \
+            --options runtime \
+            --timestamp \
+            --entitlements "$PWD/NotchApp/NotchApp.entitlements" \
+            "$APP_PATH"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
       - name: Install DMG packaging tool
         run: |
           NPM_BIN="$PWD/runtime/.build/tools/node/bin/npm"
