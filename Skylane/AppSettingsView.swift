@@ -198,6 +198,7 @@ extension Notification.Name {
 
 private struct GeneralSettingsPage: View {
     @Binding var accentColor: AppAccentColor
+    @ObservedObject private var appUpdater = AppUpdater.shared
     @State private var launchAtLogin = Preferences.isLaunchAtLoginEnabled
     @State private var showMenuBarIcon = Preferences.isMenuBarIconEnabled
     @State private var openLaneOnHover = Preferences.openLaneMode == .hover
@@ -207,6 +208,18 @@ private struct GeneralSettingsPage: View {
     @State private var toggleLaneShortcut = Preferences.toggleLaneShortcut ?? .toggleLaneDefault
     @State private var hasToggleLaneShortcut = Preferences.toggleLaneShortcut != nil
     @State private var isRecordingShortcut = false
+
+    private var automaticDownloadsSubtitle: String {
+        if !appUpdater.allowsAutomaticUpdates {
+            return "Automatic downloads are not available for this build."
+        }
+
+        if !appUpdater.automaticallyChecksForUpdates {
+            return "Enable automatic checks to turn this on."
+        }
+
+        return "Download updates in the background when available."
+    }
 
     var body: some View {
         ScrollView {
@@ -238,6 +251,40 @@ private struct GeneralSettingsPage: View {
                                 Preferences.isMenuBarIconEnabled = $0
                             }
                         )
+                    )
+                }
+
+                SettingsSection(
+                    title: "Updates",
+                    symbolName: "arrow.trianglehead.counterclockwise"
+                ) {
+                    SettingsToggleRow(
+                        title: "Automatically check for updates",
+                        subtitle: "Keep Skylane up to date in the background.",
+                        isOn: Binding(
+                            get: { appUpdater.automaticallyChecksForUpdates },
+                            set: { appUpdater.setAutomaticallyChecksForUpdates($0) }
+                        )
+                    )
+
+                    SettingsToggleRow(
+                        title: "Automatically download updates",
+                        subtitle: automaticDownloadsSubtitle,
+                        isOn: Binding(
+                            get: { appUpdater.automaticallyDownloadsUpdates },
+                            set: { appUpdater.setAutomaticallyDownloadsUpdates($0) }
+                        )
+                    )
+                    .disabled(!appUpdater.canConfigureAutomaticDownloads)
+
+                    SettingsActionRow(
+                        title: "Check for Updates…",
+                        subtitle: "Look for a newer Skylane release right now.",
+                        buttonTitle: appUpdater.canCheckForUpdates ? "Check Now" : "Checking…",
+                        isEnabled: appUpdater.canCheckForUpdates,
+                        action: {
+                            appUpdater.performCheckForUpdates()
+                        }
                     )
                 }
 
@@ -2074,6 +2121,42 @@ private struct SettingsValueRow: View {
             Text(value)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white.opacity(isDimmed ? 0.34 : 0.64))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+}
+
+private struct SettingsActionRow: View {
+    var title: String
+    var subtitle: String? = nil
+    var buttonTitle: String
+    var isEnabled = true
+    var action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            SettingsRowLabel(title: title, subtitle: subtitle)
+
+            Spacer(minLength: 16)
+
+            Button(action: action) {
+                Text(buttonTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(isEnabled ? 0.82 : 0.42))
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(.white.opacity(isEnabled ? 0.06 : 0.03))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .strokeBorder(.white.opacity(isEnabled ? 0.08 : 0.05), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

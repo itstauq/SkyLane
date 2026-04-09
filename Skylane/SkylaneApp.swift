@@ -4,6 +4,7 @@ import Carbon.HIToolbox
 @main
 struct SkylaneApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var appUpdater = AppUpdater.shared
 
     var body: some Scene {
         Settings {
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardShortcutPreferenceObserver: NSObjectProtocol?
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
+    private let appUpdater = AppUpdater.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.write("App launched")
@@ -282,6 +284,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(openSettings),
             keyEquivalent: ","
         ))
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(AppUpdater.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.image = NSImage(
+            systemSymbolName: "arrow.trianglehead.clockwise",
+            accessibilityDescription: "Check for Updates"
+        )
+        checkForUpdatesItem.target = appUpdater
+        menu.addItem(checkForUpdatesItem)
         menu.addItem(makeStatusMenuItem(
             title: "About",
             systemImageName: "info.circle",

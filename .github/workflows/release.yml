@@ -109,11 +109,20 @@ jobs:
           DMG_PATH="$(just notarize-dmg | tail -n 1)"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
 
+      - name: Generate Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY_BASE64: ${{ secrets.SPARKLE_PRIVATE_KEY_BASE64 }}
+        run: |
+          APPCAST_PATH="$(just generate-appcast | tail -n 1)"
+          echo "APPCAST_PATH=$APPCAST_PATH" >> "$GITHUB_ENV"
+
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Skylane-${{ needs.bump-version.outputs.version }}-dmg
-          path: ${{ env.DMG_PATH }}
+          name: Skylane-${{ needs.bump-version.outputs.version }}-release-assets
+          path: |
+            ${{ env.DMG_PATH }}
+            ${{ env.APPCAST_PATH }}
 
       - name: Create draft GitHub release
         env:
@@ -121,6 +130,7 @@ jobs:
         run: |
           gh release create "${{ needs.bump-version.outputs.tag }}" \
             "${DMG_PATH}" \
+            "${APPCAST_PATH}" \
             --draft \
             --generate-notes \
             --title "${{ needs.bump-version.outputs.tag }}"

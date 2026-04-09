@@ -1,0 +1,50 @@
+name: Publish Appcast
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy appcast
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download appcast release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PAGES_DIR="$RUNNER_TEMP/pages"
+          mkdir -p "$PAGES_DIR"
+          gh release download "${{ github.event.release.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern appcast.xml \
+            --dir "$PAGES_DIR"
+          printf '%s\n' 'updates.skylaneapp.com' > "$PAGES_DIR/CNAME"
+          touch "$PAGES_DIR/.nojekyll"
+          echo "PAGES_DIR=$PAGES_DIR" >> "$GITHUB_ENV"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.PAGES_DIR }}
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

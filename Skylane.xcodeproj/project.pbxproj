@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		A10000010000000000000001 /* SkylaneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001; };
 		A10000390000000000000039 /* SkylaneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001; };
+		A10000460000000000000046 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000250000000000000025; };
+		A10000470000000000000047 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000250000000000000025; };
+		A10000480000000000000048 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C10000080000000000000008 /* Sparkle */; };
 		A10000020000000000000002 /* LanePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000020000000000000002; };
 		A10000420000000000000042 /* LanePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000020000000000000002; };
 		A10000030000000000000003 /* LaneViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000030000000000000003; };
@@ -54,6 +57,7 @@
 
 /* Begin PBXFileReference section */
 		A20000010000000000000001 /* SkylaneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkylaneApp.swift; sourceTree = "<group>"; };
+		A20000250000000000000025 /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		A20000020000000000000002 /* LanePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanePanel.swift; sourceTree = "<group>"; };
 		A20000030000000000000003 /* LaneViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaneViewModel.swift; sourceTree = "<group>"; };
 		A20000040000000000000004 /* LaneContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaneContentView.swift; sourceTree = "<group>"; };
@@ -85,6 +89,7 @@
 				isa = PBXFrameworksBuildPhase;
 				buildActionMask = 2147483647;
 				files = (
+					A10000480000000000000048 /* Sparkle in Frameworks */,
 					A10000240000000000000024 /* SQLCipher in Frameworks */,
 					A10000350000000000000035 /* Nuke in Frameworks */,
 				);
@@ -116,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000010000000000000001 /* SkylaneApp.swift */,
+				A20000250000000000000025 /* AppUpdater.swift */,
 				A20000020000000000000002 /* LanePanel.swift */,
 				A20000030000000000000003 /* LaneViewModel.swift */,
 				A20000040000000000000004 /* LaneContentView.swift */,
@@ -177,6 +183,7 @@
 				packageProductDependencies = (
 					C10000020000000000000002 /* SQLCipher */,
 					C10000050000000000000005 /* Nuke */,
+					C10000080000000000000008 /* Sparkle */,
 				);
 				productName = Skylane;
 				productReference = A30000010000000000000001 /* Skylane.app */;
@@ -235,6 +242,7 @@
 				packageReferences = (
 					C10000010000000000000001 /* XCRemoteSwiftPackageReference "swift-sqlcipher" */,
 					C10000040000000000000004 /* XCRemoteSwiftPackageReference "Nuke" */,
+					C10000070000000000000007 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				);
 				targets = (
 					A60000010000000000000001 /* Skylane */,
@@ -281,6 +289,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000010000000000000001 /* SkylaneApp.swift in Sources */,
+				A10000460000000000000046 /* AppUpdater.swift in Sources */,
 				A10000020000000000000002 /* LanePanel.swift in Sources */,
 				A10000030000000000000003 /* LaneViewModel.swift in Sources */,
 				A10000040000000000000004 /* LaneContentView.swift in Sources */,
@@ -305,6 +314,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000390000000000000039 /* SkylaneApp.swift in Sources */,
+				A10000470000000000000047 /* AppUpdater.swift in Sources */,
 				A10000420000000000000042 /* LanePanel.swift in Sources */,
 				A10000400000000000000040 /* LaneViewModel.swift in Sources */,
 				A10000410000000000000041 /* LaneContentView.swift in Sources */,
@@ -346,6 +356,14 @@
 					minimumVersion = 12.8.0;
 				};
 			};
+			C10000070000000000000007 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+				isa = XCRemoteSwiftPackageReference;
+				repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
+				requirement = {
+					kind = upToNextMajorVersion;
+					minimumVersion = 2.8.1;
+				};
+			};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -368,6 +386,11 @@
 				isa = XCSwiftPackageProductDependency;
 				package = C10000040000000000000004 /* XCRemoteSwiftPackageReference "Nuke" */;
 				productName = Nuke;
+			};
+			C10000080000000000000008 /* Sparkle */ = {
+				isa = XCSwiftPackageProductDependency;
+				package = C10000070000000000000007 /* XCRemoteSwiftPackageReference "Sparkle" */;
+				productName = Sparkle;
 			};
 /* End XCSwiftPackageProductDependency section */
 
@@ -505,6 +528,7 @@
 				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.skylane.Skylane;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SPARKLE_PUBLIC_ED_KEY = "yahmiczFTkE4DOM3KpjtSgxPVd88a5M3QPfToQG4+kk=";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -527,6 +551,7 @@
 				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.skylane.Skylane;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SPARKLE_PUBLIC_ED_KEY = "yahmiczFTkE4DOM3KpjtSgxPVd88a5M3QPfToQG4+kk=";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};

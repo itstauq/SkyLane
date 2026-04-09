@@ -57,6 +57,57 @@ bump-version bump_type:
     echo "build=${NEXT_BUILD}"
     echo "tag=v${NEXT_VERSION}"
 
+release-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    REPO_ROOT="{{ repo_root }}"
+    PROJECT_FILE="$REPO_ROOT/Skylane.xcodeproj/project.pbxproj"
+
+    perl -ne 'if (/MARKETING_VERSION = ([0-9]+(?:\.[0-9]+){1,2});/) { print $1; exit }' "$PROJECT_FILE"
+
+release-tag:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    VERSION="$(just --quiet release-version)"
+    echo "v${VERSION}"
+
+release-dmg-name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    VERSION="$(just --quiet release-version)"
+    echo "Skylane-v${VERSION}.dmg"
+
+sparkle-tool tool:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    REPO_ROOT="{{ repo_root }}"
+    TOOL="{{ tool }}"
+    BUILD_ROOT="${BUILD_ROOT:-$REPO_ROOT/.build/release}"
+    SOURCE_PACKAGES_DIR="$BUILD_ROOT/SourcePackages"
+    SPARKLE_CHECKOUT="$SOURCE_PACKAGES_DIR/checkouts/Sparkle"
+    DERIVED_DATA_PATH="$BUILD_ROOT/SparkleTools"
+
+    if [ ! -d "$SPARKLE_CHECKOUT" ]; then
+      echo "Sparkle checkout not found at $SPARKLE_CHECKOUT" >&2
+      echo "Resolve package dependencies first." >&2
+      exit 1
+    fi
+
+    xcodebuild \
+      -project "$SPARKLE_CHECKOUT/Sparkle.xcodeproj" \
+      -scheme "$TOOL" \
+      -configuration Release \
+      -derivedDataPath "$DERIVED_DATA_PATH" \
+      build \
+      CODE_SIGNING_ALLOWED=NO \
+      CODE_SIGNING_REQUIRED=NO >/dev/null
+
+    echo "$DERIVED_DATA_PATH/Build/Products/Release/$TOOL"
+
 test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -202,13 +253,27 @@ build-dmg:
     REPO_ROOT="{{ repo_root }}"
     APP_PATH="$REPO_ROOT/.build/release/Skylane.xcarchive/Products/Applications/Skylane.app"
     SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-Developer ID Application}"
+    VERSION="$(just --quiet release-version)"
+    DMG_NAME="$(just --quiet release-dmg-name)"
+    RAW_DMG_DIR="$REPO_ROOT/.build/release/create-dmg/$VERSION"
+    ARTIFACTS_DIR="$REPO_ROOT/.build/release/artifacts"
 
-    mkdir -p "$REPO_ROOT/.build/release/artifacts"
+    mkdir -p "$ARTIFACTS_DIR" "$RAW_DMG_DIR"
     "$REPO_ROOT/.build/release/node-global/node_modules/.bin/create-dmg" \
       --overwrite \
       --identity="$SIGNING_IDENTITY" \
       "$APP_PATH" \
-      "$REPO_ROOT/.build/release/artifacts"
+      "$RAW_DMG_DIR"
+
+    RAW_DMG_PATH="$(find "$RAW_DMG_DIR" -maxdepth 1 -name '*.dmg' -print -quit)"
+    if [ -z "$RAW_DMG_PATH" ]; then
+      echo "DMG was not created in $RAW_DMG_DIR" >&2
+      exit 1
+    fi
+
+    FINAL_DMG_PATH="$ARTIFACTS_DIR/$DMG_NAME"
+    mv -f "$RAW_DMG_PATH" "$FINAL_DMG_PATH"
+    echo "$FINAL_DMG_PATH"
 
 notarize-dmg:
     #!/usr/bin/env bash
@@ -222,8 +287,8 @@ notarize-dmg:
       exit 1
     fi
 
-    DMG_PATH="$(find "$REPO_ROOT/.build/release/artifacts" -maxdepth 1 -name '*.dmg' -print -quit)"
-    if [ -z "$DMG_PATH" ]; then
+    DMG_PATH="$REPO_ROOT/.build/release/artifacts/$(just --quiet release-dmg-name)"
+    if [ ! -f "$DMG_PATH" ]; then
       echo "DMG not found" >&2
       exit 1
     fi
@@ -243,7 +308,70 @@ notarize-dmg:
     xcrun stapler staple "$DMG_PATH"
     echo "$DMG_PATH"
 
+generate-appcast:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    REPO_ROOT="{{ repo_root }}"
+    BUILD_ROOT="${BUILD_ROOT:-$REPO_ROOT/.build/release}"
+    ARTIFACTS_DIR="$BUILD_ROOT/artifacts"
+    VERSION="$(just --quiet release-version)"
+    TAG="$(just --quiet release-tag)"
+    APPCAST_INPUT_DIR="$BUILD_ROOT/appcast-input/$VERSION"
+    APPCAST_PATH="$BUILD_ROOT/appcast.xml"
+    DMG_NAME="$(just --quiet release-dmg-name)"
+    DMG_PATH="$ARTIFACTS_DIR/$DMG_NAME"
+    TOOL_PATH="$(just --quiet sparkle-tool generate_appcast)"
+    DOWNLOAD_URL_PREFIX="https://github.com/itstauq/Skylane/releases/download/${TAG}/"
+
+    if [ ! -f "$DMG_PATH" ]; then
+      echo "DMG not found at $DMG_PATH" >&2
+      exit 1
+    fi
+
+    mkdir -p "$APPCAST_INPUT_DIR"
+    cp "$DMG_PATH" "$APPCAST_INPUT_DIR/$DMG_NAME"
+
+    if [ -n "${SPARKLE_PRIVATE_KEY_BASE64:-}" ]; then
+      printf '%s\n' "$SPARKLE_PRIVATE_KEY_BASE64" | \
+        "$TOOL_PATH" \
+          --ed-key-file - \
+          --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+          -o "$APPCAST_PATH" \
+          "$APPCAST_INPUT_DIR" >/dev/null
+    else
+      "$TOOL_PATH" \
+        --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+        -o "$APPCAST_PATH" \
+        "$APPCAST_INPUT_DIR" >/dev/null
+    fi
+
+    echo "$APPCAST_PATH"
+
+stage-appcast-pages:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    REPO_ROOT="{{ repo_root }}"
+    BUILD_ROOT="${BUILD_ROOT:-$REPO_ROOT/.build/release}"
+    APPCAST_PATH="$BUILD_ROOT/appcast.xml"
+    PAGES_DIR="$BUILD_ROOT/pages"
+
+    if [ ! -f "$APPCAST_PATH" ]; then
+      echo "Appcast not found at $APPCAST_PATH" >&2
+      exit 1
+    fi
+
+    mkdir -p "$PAGES_DIR"
+    cp "$APPCAST_PATH" "$PAGES_DIR/appcast.xml"
+    printf '%s\n' 'updates.skylaneapp.com' > "$PAGES_DIR/CNAME"
+    touch "$PAGES_DIR/.nojekyll"
+
+    echo "$PAGES_DIR"
+
 release-local:
     just package --sign
     just build-dmg
-    just notarize-dmg
+    # just notarize-dmg
+    # just generate-appcast
+    # just stage-appcast-pages

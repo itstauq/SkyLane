@@ -17,5 +17,13 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Skylane uses the camera to provide camera capabilities to widgets.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://updates.skylaneapp.com/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 </dict>
 </plist>
