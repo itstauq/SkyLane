@@ -1,6 +1,6 @@
 {
   "name": "@skylane/api",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Widget component API for building Skylane widgets",
   "main": "index.js",
   "files": [

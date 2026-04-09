@@ -1,0 +1,153 @@
+name: Publish SDK Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version bump type"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish npm packages
+    runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump SDK package versions
+        id: bump
+        env:
+          BUMP_TYPE: ${{ inputs.bump_type }}
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const path = require("path");
+
+          const root = process.cwd();
+          const packagePaths = [
+            path.join(root, "sdk/packages/api/package.json"),
+            path.join(root, "sdk/packages/skylane/package.json"),
+          ];
+
+          const packages = packagePaths.map((packagePath) => ({
+            packagePath,
+            data: JSON.parse(fs.readFileSync(packagePath, "utf8")),
+          }));
+
+          const versions = [...new Set(packages.map(({ data }) => data.version))];
+          if (versions.length !== 1) {
+            throw new Error(`Expected lockstep package versions, found: ${versions.join(", ")}`);
+          }
+
+          const currentVersion = versions[0];
+          const [major, minor, patch] = currentVersion.split(".").map(Number);
+          if ([major, minor, patch].some((part) => Number.isNaN(part))) {
+            throw new Error(`Unsupported semver version: ${currentVersion}`);
+          }
+
+          const bumpType = process.env.BUMP_TYPE;
+          const next = { major, minor, patch };
+
+          switch (bumpType) {
+            case "major":
+              next.major += 1;
+              next.minor = 0;
+              next.patch = 0;
+              break;
+            case "minor":
+              next.minor += 1;
+              next.patch = 0;
+              break;
+            case "patch":
+              next.patch += 1;
+              break;
+            default:
+              throw new Error(`Unknown bump type: ${bumpType}`);
+          }
+
+          const nextVersion = `${next.major}.${next.minor}.${next.patch}`;
+          for (const { packagePath, data } of packages) {
+            data.version = nextVersion;
+            fs.writeFileSync(packagePath, `${JSON.stringify(data, null, 2)}\n`);
+          }
+
+          const githubOutput = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(githubOutput, `version=${nextVersion}\n`);
+          fs.appendFileSync(githubOutput, `tag=sdk-v${nextVersion}\n`);
+          NODE
+
+      - name: Refresh SDK lockfile
+        run: npm --prefix sdk install --package-lock-only
+
+      - name: Verify version is unpublished
+        env:
+          SDK_VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          for package_name in "@skylane/api" "skylane"; do
+            if npm view "${package_name}@${SDK_VERSION}" version >/dev/null 2>&1; then
+              echo "${package_name}@${SDK_VERSION} is already published" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install SDK dependencies
+        run: npm --prefix sdk ci
+
+      - name: Run SDK tests
+        run: npm --prefix sdk test
+
+      - name: Verify npm package contents
+        run: |
+          npm --prefix sdk pack --dry-run --workspace @skylane/api
+          npm --prefix sdk pack --dry-run --workspace skylane
+
+      - name: Publish @skylane/api
+        run: npm --prefix sdk publish --workspace @skylane/api --access public --provenance
+
+      - name: Publish skylane
+        run: npm --prefix sdk publish --workspace skylane --access public --provenance
+
+      - name: Commit and tag SDK release
+        env:
+          SDK_TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          git add sdk/packages/api/package.json sdk/packages/skylane/package.json sdk/package-lock.json
+          git commit -m "Release SDK ${SDK_TAG}"
+          git tag "${SDK_TAG}"
+
+      - name: Push SDK release commit and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin "${SDK_TAG}"
