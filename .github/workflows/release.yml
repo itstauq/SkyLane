@@ -17,13 +17,9 @@ permissions:
   contents: write
 
 jobs:
-  bump-version:
-    name: Bump version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.bump.outputs.version }}
-      build: ${{ steps.bump.outputs.build }}
-      tag: ${{ steps.bump.outputs.tag }}
+  release:
+    name: Build and draft release
+    runs-on: macos-15
 
     steps:
       - name: Check out repository
@@ -47,33 +43,8 @@ jobs:
           printf '%s\n' "$output"
           printf '%s\n' "$output" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and tag release metadata
-        run: |
-          git add Skylane.xcodeproj/project.pbxproj Skylane/AppSettingsView.swift
-          git commit -m "Release ${{ steps.bump.outputs.tag }}"
-          git tag "${{ steps.bump.outputs.tag }}"
-
-      - name: Push commit and tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin HEAD:${{ github.ref_name }}
-          git push origin "${{ steps.bump.outputs.tag }}"
-
-  release:
-    name: Build and draft release
-    needs: bump-version
-    runs-on: macos-15
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.bump-version.outputs.tag }}
-
-      - name: Setup just cli
-        uses: extractions/setup-just@v2
+      - name: Run CI checks
+        run: just test
 
       - name: Install DMG packaging tool
         run: |
@@ -81,9 +52,6 @@ jobs:
           NODE_GLOBAL_ROOT="$PWD/.build/release/node-global"
           mkdir -p "$NODE_GLOBAL_ROOT"
           "$NPM_BIN" install --prefix "$NODE_GLOBAL_ROOT" create-dmg
-
-      - name: Run CI checks
-        run: just test
 
       - name: Import Developer ID certificate
         uses: apple-actions/import-codesign-certs@v5
@@ -119,18 +87,34 @@ jobs:
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Skylane-${{ needs.bump-version.outputs.version }}-release-assets
+          name: Skylane-${{ steps.bump.outputs.version }}-release-assets
           path: |
             ${{ env.DMG_PATH }}
             ${{ env.APPCAST_PATH }}
+
+      - name: Commit and tag release metadata
+        env:
+          RELEASE_TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          git add Skylane.xcodeproj/project.pbxproj Skylane/AppSettingsView.swift
+          git commit -m "Release ${RELEASE_TAG}"
+          git tag "${RELEASE_TAG}"
+
+      - name: Push release commit and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin "${{ steps.bump.outputs.tag }}"
 
       - name: Create draft GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ needs.bump-version.outputs.tag }}" \
+          gh release create "${{ steps.bump.outputs.tag }}" \
             "${DMG_PATH}" \
             "${APPCAST_PATH}" \
             --draft \
             --generate-notes \
-            --title "${{ needs.bump-version.outputs.tag }}"
+            --title "${{ steps.bump.outputs.tag }}"
