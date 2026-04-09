@@ -1220,7 +1220,8 @@ final class ViewManager {
         case SavedView.homeID:
             widgets = [
                 widget("com.skylane.capture", 0, 5),
-                widget("com.skylane.camera-preview", 5, 4)
+                widget("com.skylane.camera-preview", 5, 4),
+                widget("com.skylane.music", 9, 3)
             ].compactMap { $0 }
         default:
             widgets = []

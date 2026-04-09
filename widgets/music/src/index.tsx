@@ -64,17 +64,13 @@ export default function Widget() {
         cornerRadius={16}
         onClick={hasAction("openSourceApp") ? openSourceApp : undefined}
       >
-        {artworkSrc ? (
+        {artworkSrc && (
           <Image
             src={artworkSrc}
             contentMode="fill"
             frame={{ maxWidth: Infinity, maxHeight: Infinity }}
             clipShape={{ type: "roundedRect", cornerRadius: 16 }}
           />
-        ) : (
-          <Overlay placement="top" inset="sm">
-            <Icon symbol="music.note" size={18} weight="semibold" tone="accent" />
-          </Overlay>
         )}
 
         <Overlay placement="bottom" inset="sm">
@@ -91,6 +87,9 @@ export default function Widget() {
               inset="none"
               padding={{ top: 10, leading: 12, trailing: 12, bottom: 10 }}
             >
+              {!hasArtwork && (
+                <Icon symbol="music.note" size={18} weight="semibold" tone="accent" />
+              )}
               <Marquee active={isPlaying}>
                 <CardTitle alignment="center" lineClamp={1}>
                   {title}
