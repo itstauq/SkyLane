@@ -14,7 +14,7 @@ struct SkylaneApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private static let toggleHotKeyID: UInt32 = 1
 
     private var statusItem: NSStatusItem?
@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardShortcutPreferenceObserver: NSObjectProtocol?
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
+    private var statusMenuShortcutMonitor: Any?
     private let appUpdater = AppUpdater.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -76,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let keyboardShortcutPreferenceObserver {
             NotificationCenter.default.removeObserver(keyboardShortcutPreferenceObserver)
         }
+        removeStatusMenuShortcutMonitor()
         unregisterHotKey()
         logger.write("App exiting")
     }
@@ -278,39 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
         }
-        let menu = NSMenu()
-        menu.addItem(makeStatusMenuItem(
-            title: "Settings",
-            systemImageName: "gearshape",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        ))
-        let checkForUpdatesItem = NSMenuItem(
-            title: "Check for Updates…",
-            action: #selector(AppUpdater.checkForUpdates(_:)),
-            keyEquivalent: ""
-        )
-        checkForUpdatesItem.image = NSImage(
-            systemSymbolName: "arrow.trianglehead.clockwise",
-            accessibilityDescription: "Check for Updates"
-        )
-        checkForUpdatesItem.target = appUpdater
-        menu.addItem(checkForUpdatesItem)
-        menu.addItem(makeStatusMenuItem(
-            title: "About",
-            systemImageName: "info.circle",
-            action: #selector(openAbout),
-            keyEquivalent: ""
-        ))
-        menu.addItem(.separator())
-        menu.addItem(makeStatusMenuItem(
-            title: "Quit",
-            systemImageName: "power",
-            action: #selector(quit),
-            keyEquivalent: "q"
-        ))
-        menu.items.forEach { $0.target = self }
-        statusItem?.menu = menu
+        refreshStatusMenu()
     }
 
     private func makeStatusMenuItem(
@@ -324,10 +294,198 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             systemSymbolName: systemImageName,
             accessibilityDescription: title
         )
+        item.target = self
         return item
     }
 
+    private func makeExternalLinkMenuItem(
+        title: String,
+        systemImageName: String,
+        urlString: String
+    ) -> NSMenuItem {
+        let item = makeStatusMenuItem(
+            title: title,
+            systemImageName: systemImageName,
+            action: #selector(openExternalLink(_:)),
+            keyEquivalent: ""
+        )
+        item.representedObject = urlString
+        return item
+    }
+
+    private func refreshStatusMenu() {
+        guard statusItem != nil else { return }
+        statusItem?.menu = makeStatusMenu()
+    }
+
+    private func makeStatusMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.delegate = self
+
+        let openSkylaneItem = makeStatusMenuItem(
+            title: "Open Skylane",
+            systemImageName: "macwindow",
+            action: #selector(openSkylane),
+            keyEquivalent: ""
+        )
+        applyStatusMenuShortcut(Preferences.toggleLaneShortcut, to: openSkylaneItem)
+        menu.addItem(openSkylaneItem)
+        menu.addItem(.separator())
+        menu.addItem(makeExternalLinkMenuItem(
+            title: "Send Feedback",
+            systemImageName: "bubble.left.and.text.bubble.right",
+            urlString: "https://github.com/itstauq/Skylane/issues"
+        ))
+        menu.addItem(makeExternalLinkMenuItem(
+            title: "User Guide",
+            systemImageName: "book.closed",
+            urlString: "https://mintlify.wiki/itstauq/SkyLane"
+        ))
+        menu.addItem(makeExternalLinkMenuItem(
+            title: "Star on GitHub",
+            systemImageName: "star",
+            urlString: "https://github.com/itstauq/Skylane/"
+        ))
+        let followUsItem = makeExternalLinkMenuItem(
+            title: "Follow Us",
+            systemImageName: "xmark",
+            urlString: "https://x.com/itstauq"
+        )
+        if let image = (NSImage(named: "XLogo")?.copy() as? NSImage) {
+            image.size = NSSize(width: 12, height: 12)
+            image.isTemplate = true
+            followUsItem.image = image
+        }
+        menu.addItem(followUsItem)
+        menu.addItem(.separator())
+
+        let versionItem = NSMenuItem(title: "Version \(appVersionString)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+        menu.addItem(makeStatusMenuItem(
+            title: "About Skylane",
+            systemImageName: "info.circle",
+            action: #selector(openAbout),
+            keyEquivalent: ""
+        ))
+
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check for Updates",
+            action: #selector(AppUpdater.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.image = NSImage(
+            systemSymbolName: "arrow.trianglehead.clockwise",
+            accessibilityDescription: "Check for Updates"
+        )
+        checkForUpdatesItem.target = appUpdater
+        menu.addItem(checkForUpdatesItem)
+
+        let settingsItem = makeStatusMenuItem(
+            title: "Settings",
+            systemImageName: "gearshape",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(settingsItem)
+        menu.addItem(.separator())
+        menu.addItem(makeStatusMenuItem(
+            title: "Restart Skylane",
+            systemImageName: "arrow.clockwise",
+            action: #selector(restartSkylane),
+            keyEquivalent: ""
+        ))
+        menu.addItem(makeStatusMenuItem(
+            title: "Quit",
+            systemImageName: "power",
+            action: #selector(quit),
+            keyEquivalent: "q"
+        ))
+
+        return menu
+    }
+
+    private func applyStatusMenuShortcut(_ shortcut: Preferences.KeyboardShortcut?, to item: NSMenuItem) {
+        guard let shortcut,
+              let keyEquivalent = keyEquivalentString(for: shortcut.keyCode) else {
+            item.keyEquivalent = ""
+            item.keyEquivalentModifierMask = []
+            return
+        }
+
+        item.keyEquivalent = keyEquivalent
+        item.keyEquivalentModifierMask = shortcut.modifiers.intersection([.control, .option, .shift, .command])
+    }
+
+    private func keyEquivalentString(for keyCode: UInt32) -> String? {
+        switch keyCode {
+        case UInt32(kVK_Return):
+            return "\r"
+        case UInt32(kVK_Tab):
+            return "\t"
+        case UInt32(kVK_Space):
+            return " "
+        case UInt32(kVK_Delete):
+            return String(Character(UnicodeScalar(NSDeleteCharacter)!))
+        case UInt32(kVK_ForwardDelete):
+            return String(Character(UnicodeScalar(NSDeleteFunctionKey)!))
+        case UInt32(kVK_Escape):
+            return "\u{1B}"
+        case UInt32(kVK_LeftArrow):
+            return String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
+        case UInt32(kVK_RightArrow):
+            return String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+        case UInt32(kVK_DownArrow):
+            return String(Character(UnicodeScalar(NSDownArrowFunctionKey)!))
+        case UInt32(kVK_UpArrow):
+            return String(Character(UnicodeScalar(NSUpArrowFunctionKey)!))
+        default:
+            guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+                  let layoutData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+                return nil
+            }
+
+            let keyboardLayout = unsafeBitCast(layoutData, to: CFData.self)
+            guard let layoutPtr = CFDataGetBytePtr(keyboardLayout) else {
+                return nil
+            }
+
+            let layout = UnsafePointer<UCKeyboardLayout>(OpaquePointer(layoutPtr))
+            var deadKeyState: UInt32 = 0
+            var length = 0
+            var chars = [UniChar](repeating: 0, count: 4)
+
+            let status = UCKeyTranslate(
+                layout,
+                UInt16(keyCode),
+                UInt16(kUCKeyActionDisplay),
+                0,
+                UInt32(LMGetKbdType()),
+                OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                &deadKeyState,
+                chars.count,
+                &length,
+                &chars
+            )
+
+            guard status == noErr, length > 0 else { return nil }
+            return String(utf16CodeUnits: chars, count: length).lowercased()
+        }
+    }
+
+    private var appVersionString: String {
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let buildVersion = Bundle.main.object(forInfoDictionaryKey: kCFBundleVersionKey as String) as? String
+        return shortVersion ?? buildVersion ?? "0.1.0"
+    }
+
     private func removeStatusBar() {
+        let hadStatusMenuShortcutMonitor = statusMenuShortcutMonitor != nil
+        removeStatusMenuShortcutMonitor()
+        if hadStatusMenuShortcutMonitor {
+            registerHotKeyIfNeeded()
+        }
         guard let statusItem else { return }
         NSStatusBar.system.removeStatusItem(statusItem)
         self.statusItem = nil
@@ -361,6 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.registerHotKeyIfNeeded()
+                self?.refreshStatusMenu()
             }
         }
     }
@@ -373,6 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.registerHotKeyIfNeeded()
+                self?.refreshStatusMenu()
             }
         }
     }
@@ -418,6 +578,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func installStatusMenuShortcutMonitor(for menu: NSMenu) {
+        removeStatusMenuShortcutMonitor()
+        statusMenuShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak menu] event in
+            guard let self, let menu else { return event }
+            guard self.matchesToggleShortcut(event) else { return event }
+
+            menu.cancelTrackingWithoutAnimation()
+            Task { @MainActor [weak self] in
+                self?.openSkylane()
+            }
+            return nil
+        }
+    }
+
+    private func removeStatusMenuShortcutMonitor() {
+        if let statusMenuShortcutMonitor {
+            NSEvent.removeMonitor(statusMenuShortcutMonitor)
+            self.statusMenuShortcutMonitor = nil
+        }
+    }
+
+    private func matchesToggleShortcut(_ event: NSEvent) -> Bool {
+        guard let shortcut = Preferences.toggleLaneShortcut else { return false }
+        let relevantModifiers = event.modifierFlags.intersection([.control, .option, .shift, .command])
+        let shortcutModifiers = shortcut.modifiers.intersection([.control, .option, .shift, .command])
+        return UInt32(event.keyCode) == shortcut.keyCode && relevantModifiers == shortcutModifiers
+    }
+
     private func handleHotKeyEvent(_ event: EventRef) -> OSStatus {
         var hotKeyID = EventHotKeyID()
         let status = GetEventParameter(
@@ -459,8 +647,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vm.clicked()
     }
 
+    @objc private func openSkylane() {
+        hoverOpenTask?.cancel()
+        lanePanel?.alphaValue = 1
+        blurPanel?.alphaValue = 1
+
+        if vm.isExpanded {
+            LanePanel.contentPanel?.activateForKeyInput()
+            return
+        }
+
+        vm.clicked()
+    }
+
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func restartSkylane() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-n", Bundle.main.bundlePath]
+
+        do {
+            try process.run()
+            NSApplication.shared.terminate(nil)
+        } catch {
+            logger.write("Restart failed: \(error.localizedDescription)")
+        }
     }
 
     @objc private func openSettings() {
@@ -469,6 +683,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openAbout() {
         AppSettingsWindow.open(tab: .about)
+    }
+
+    @objc private func openExternalLink(_ sender: NSMenuItem) {
+        guard let rawURL = sender.representedObject as? String,
+              let url = URL(string: rawURL) else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu == statusItem?.menu else { return }
+        unregisterHotKey()
+        installStatusMenuShortcutMonitor(for: menu)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu == statusItem?.menu else { return }
+        removeStatusMenuShortcutMonitor()
+        registerHotKeyIfNeeded()
     }
 
     private func registerURLHandler() {
