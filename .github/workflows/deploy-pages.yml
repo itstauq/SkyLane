@@ -53,6 +53,14 @@ jobs:
           PAGES_DIR="$RUNNER_TEMP/pages"
           mkdir -p "$PAGES_DIR"
           cp -R website/. "$PAGES_DIR"/
+          DMG_URL="$(gh api "repos/${{ github.repository }}/releases/tags/${RELEASE_TAG}" --jq '.assets[] | select(.name | endswith(".dmg")) | .browser_download_url' | head -n 1)"
+
+          if [ -z "$DMG_URL" ] || [ "$DMG_URL" = "null" ]; then
+            echo "Failed to resolve DMG asset URL for release $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          perl -0pi -e 's|__SKYLANE_DMG_URL__|\Q$ENV{DMG_URL}\E|g' "$PAGES_DIR/index.html"
           gh release download "$RELEASE_TAG" \
             --repo "${{ github.repository }}" \
             --pattern appcast.xml \

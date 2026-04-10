@@ -380,6 +380,11 @@
       height: 16px;
     }
 
+    .icon-apple {
+      flex-shrink: 0;
+      transform: translateY(-0.5px);
+    }
+
     .btn-secondary {
       display: inline-flex;
       align-items: center;
@@ -736,6 +741,12 @@
     .code-body .num { color: #f78c6c; }
     .code-body .punct { color: rgba(245, 241, 235, 0.35); }
 
+    .extensions-actions {
+      margin-top: 32px;
+      display: flex;
+      justify-content: center;
+    }
+
     /* ── CTA Section ── */
     .cta-section {
       display: flex;
@@ -779,8 +790,9 @@
 
     .cta-requirements {
       margin-top: 20px;
-      font-size: 12px;
-      color: rgba(245, 241, 235, 0.2);
+      font-size: 13px;
+      color: rgba(245, 241, 235, 0.42);
+      letter-spacing: 0.01em;
     }
 
     /* ── Footer ── */
@@ -791,7 +803,7 @@
       align-items: center;
       justify-content: space-between;
       font-size: 13px;
-      color: rgba(245, 241, 235, 0.25);
+      color: rgba(245, 241, 235, 0.42);
     }
 
     .footer-links {
@@ -804,7 +816,7 @@
     }
 
     .footer-links a:hover {
-      color: var(--cream-dim);
+      color: rgba(245, 241, 235, 0.72);
     }
 
 
@@ -919,10 +931,13 @@
     <a href="#features">Features</a>
     <a href="#widgets">Widgets</a>
     <a href="#extensions">Extensions</a>
+    <a href="https://mintlify.wiki/itstauq/SkyLane" target="_blank" rel="noopener">Docs</a>
     <a href="https://github.com/itstauq/SkyLane" target="_blank" rel="noopener">GitHub</a>
-    <a href="https://github.com/itstauq/SkyLane/releases/latest/download/Skylane-v0.1.0.dmg" class="nav-cta">
+    <a href="__SKYLANE_DMG_URL__" class="nav-cta">
+      <svg class="icon-apple" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <path fill="currentColor" d="M11.17 8.49c.01 1.94 1.7 2.58 1.72 2.59-.01.05-.27.93-.89 1.85-.54.79-1.11 1.58-2 1.6-.87.02-1.15-.51-2.14-.51-.98 0-1.3.49-2.12.53-.86.03-1.51-.85-2.06-1.64C2.56 11.32 1.7 8.46 2.85 6.44c.57-1 1.58-1.64 2.68-1.66.84-.02 1.63.56 2.14.56.51 0 1.46-.69 2.46-.59.42.02 1.6.17 2.35 1.26-.06.04-1.4.82-1.38 2.48Zm-1.66-4.83c.46-.56.77-1.33.69-2.1-.67.03-1.49.45-1.97 1.01-.43.5-.81 1.28-.71 2.03.75.06 1.52-.38 1.99-.94Z"/>
+      </svg>
       Download
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2.5v8.5m0 0l3-3m-3 3l-3-3M3.5 13h9"/></svg>
     </a>
   </div>
   <button class="nav-hamburger" id="navHamburger" aria-label="Open menu">
@@ -939,7 +954,7 @@
   <a href="#widgets" class="mobile-nav-link">Widgets</a>
   <a href="#extensions" class="mobile-nav-link">Extensions</a>
   <a href="https://github.com/itstauq/SkyLane" target="_blank" rel="noopener">GitHub</a>
-  <a href="https://github.com/itstauq/SkyLane/releases/latest/download/Skylane-v0.1.0.dmg" class="btn-primary" style="margin-top: 8px;">
+  <a href="__SKYLANE_DMG_URL__" class="btn-primary" style="margin-top: 8px;">
     Download
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2.5v8.5m0 0l3-3m-3 3l-3-3M3.5 13h9"/></svg>
   </a>
@@ -951,9 +966,11 @@
   <h1 class="hero-title">Your notch,<br><em>unlocked</em></h1>
   <p class="hero-subtitle">Skylane turns the MacBook cutout into an always-available widget hub. Expand it, organize it, make it yours.</p>
   <div class="hero-actions">
-    <a href="https://github.com/itstauq/SkyLane/releases/latest/download/Skylane-v0.1.0.dmg" class="btn-primary">
+    <a href="__SKYLANE_DMG_URL__" class="btn-primary">
+      <svg class="icon-apple" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <path fill="currentColor" d="M11.17 8.49c.01 1.94 1.7 2.58 1.72 2.59-.01.05-.27.93-.89 1.85-.54.79-1.11 1.58-2 1.6-.87.02-1.15-.51-2.14-.51-.98 0-1.3.49-2.12.53-.86.03-1.51-.85-2.06-1.64C2.56 11.32 1.7 8.46 2.85 6.44c.57-1 1.58-1.64 2.68-1.66.84-.02 1.63.56 2.14.56.51 0 1.46-.69 2.46-.59.42.02 1.6.17 2.35 1.26-.06.04-1.4.82-1.38 2.48Zm-1.66-4.83c.46-.56.77-1.33.69-2.1-.67.03-1.49.45-1.97 1.01-.43.5-.81 1.28-.71 2.03.75.06 1.52-.38 1.99-.94Z"/>
+      </svg>
       Download for Mac
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2.5v8.5m0 0l3-3m-3 3l-3-3M3.5 13h9"/></svg>
     </a>
     <a href="https://github.com/itstauq/SkyLane" class="btn-secondary" target="_blank" rel="noopener">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5l1.85 3.75 4.15.6-3 2.93.71 4.12L8 10.77 4.29 12.9 5 8.78 2 5.85l4.15-.6L8 1.5z"/></svg>
@@ -1108,6 +1125,12 @@
 <span class="punct">}</span>
     </div>
   </div>
+
+  <div class="extensions-actions reveal reveal-delay-3">
+    <a href="https://mintlify.wiki/itstauq/SkyLane/sdk/overview" class="btn-secondary" target="_blank" rel="noopener">
+      Read SDK docs
+    </a>
+  </div>
 </section>
 
 <!-- ── CTA ── -->
@@ -1118,11 +1141,14 @@
     Early access — open source under Apache 2.0
   </div>
   <div class="cta-actions reveal reveal-delay-2">
-    <a href="https://github.com/itstauq/SkyLane/releases/latest/download/Skylane-v0.1.0.dmg" class="btn-primary">
+    <a href="__SKYLANE_DMG_URL__" class="btn-primary">
+      <svg class="icon-apple" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <path fill="currentColor" d="M11.17 8.49c.01 1.94 1.7 2.58 1.72 2.59-.01.05-.27.93-.89 1.85-.54.79-1.11 1.58-2 1.6-.87.02-1.15-.51-2.14-.51-.98 0-1.3.49-2.12.53-.86.03-1.51-.85-2.06-1.64C2.56 11.32 1.7 8.46 2.85 6.44c.57-1 1.58-1.64 2.68-1.66.84-.02 1.63.56 2.14.56.51 0 1.46-.69 2.46-.59.42.02 1.6.17 2.35 1.26-.06.04-1.4.82-1.38 2.48Zm-1.66-4.83c.46-.56.77-1.33.69-2.1-.67.03-1.49.45-1.97 1.01-.43.5-.81 1.28-.71 2.03.75.06 1.52-.38 1.99-.94Z"/>
+      </svg>
       Download for macOS
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="16" height="16"><path d="M8 2.5v8.5m0 0l3-3m-3 3l-3-3M3.5 13h9"/></svg>
     </a>
     <a href="https://github.com/itstauq/SkyLane" class="btn-secondary" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5l1.85 3.75 4.15.6-3 2.93.71 4.12L8 10.77 4.29 12.9 5 8.78 2 5.85l4.15-.6L8 1.5z"/></svg>
       Star on GitHub
     </a>
   </div>
@@ -1133,8 +1159,9 @@
 <footer>
   <span>&copy; 2026 Skylane</span>
   <div class="footer-links">
+    <a href="https://mintlify.wiki/itstauq/SkyLane" target="_blank" rel="noopener">Docs</a>
     <a href="https://github.com/itstauq/SkyLane" target="_blank" rel="noopener">GitHub</a>
-    <a href="https://github.com/itstauq/SkyLane/releases/latest/download/Skylane-v0.1.0.dmg" target="_blank" rel="noopener">Releases</a>
+    <a href="https://github.com/itstauq/SkyLane/releases" target="_blank" rel="noopener">Releases</a>
     <a href="https://github.com/itstauq/SkyLane/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
   </div>
 </footer>
